@@ -6,42 +6,34 @@ it for repeated use).
 ## Quick Start
 
 ```bash
-# 1. See what skillsaw detects in your repo
-skillsaw tree
+# 1. Lint it
+uvx skillsaw
 
-# 2. Lint it
-skillsaw
+# 2. Fix what you can automatically
+uvx skillsaw fix
 
-# 3. Fix what you can automatically
-skillsaw fix
-
-# 4. Accept remaining violations as the baseline
-skillsaw baseline
+# 3. Accept remaining violations as the baseline
+uvx skillsaw baseline
 
 # Done — only new violations will fail from here on
-skillsaw   # exit 0
+uvx skillsaw   # exit 0
 ```
 
-Over time, fix violations and re-run `skillsaw baseline` to shrink the
+Over time, fix violations and re-run `uvx skillsaw baseline` to shrink the
 accepted set. See the [Baseline guide](baseline.md) for details on how
 fingerprinting works and configuration options.
 
 ## :sparkles: Onboard with AI
 
-!!! tip "Skip the manual setup — let your AI coding agent do it all"
+!!! tip "Skip the manual setup - paste the below into your tool of choice"
 
-    The **`/skillsaw-onboard`** skill walks your agent through the full
-    adoption flow in one interactive session:
+    ```text
+    Read and follow the instructions at
+    https://raw.githubusercontent.com/stbenjam/skillsaw/refs/heads/main/skills/skillsaw-onboard/SKILL.md
+    to onboard this repo to skillsaw.
+    ```
 
-    | | Step | What happens |
-    |---|---|---|
-    | :material-numeric-1-circle:{ .step-icon } | **Install** | Adds skillsaw to your project |
-    | :material-numeric-2-circle:{ .step-icon } | **Lint** | Runs a full scan of your repo |
-    | :material-numeric-3-circle:{ .step-icon } | **Triage** | Groups findings by rule to plan fixes, baselines, or configuration |
-    | :material-numeric-4-circle:{ .step-icon } | **Autofix** | Applies safe, automatic fixes |
-    | :material-numeric-5-circle:{ .step-icon } | **Manual fix** | Resolves remaining violations interactively |
-    | :material-numeric-6-circle:{ .step-icon } | **CI** | Sets up CI to lint on every PR |
-    | :material-numeric-7-circle:{ .step-icon } | **Baseline** | Accepts any leftover violations so you start clean |
+Or install the plugin globally for regular use (recommended):
 
 === "Claude Code"
 
@@ -61,22 +53,9 @@ fingerprinting works and configuration options.
 
     Start a new Codex session, then invoke **`$skillsaw-onboard`**.
 
-=== "Other AI coding agents"
-
-    Paste this into your coding agent:
-
-    ```
-    Read and follow the instructions at
-    https://raw.githubusercontent.com/stbenjam/skillsaw/refs/heads/main/skills/skillsaw-onboard/SKILL.md
-    to onboard this repo to skillsaw.
-    ```
-
-    Or consult your agent's documentation for how to install a new
-    [agentskills.io](https://agentskills.io) skill.
-
 ## Keep skillsaw updated
 
-When a new skillsaw release is out, the **`/skillsaw-update`** skill walks
+When a new skillsaw release is out, the **`skillsaw-update`** skill walks
 your agent through the upgrade: it installs the newest version, reports which
 rules are new and what they find in your repository, and bumps pinned
 versions in GitHub Actions workflows, Makefile targets, and pre-commit hooks.
