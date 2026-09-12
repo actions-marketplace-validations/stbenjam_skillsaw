@@ -170,6 +170,8 @@ class RepositoryContext(
         self._agent_plugin_roots: Optional[Set[Path]] = None
         self._contained_plugin_roots: Optional[Set[Path]] = None
         self._agent_plugin_claims: Optional[Set[Path]] = None
+        self._agent_plugin_installed_roots: Set[Path] = set()
+        self._agent_plugin_catalog_paths: Tuple[Path, ...] = ()
         self._init_mcp_registry(repo_types)
         self._provenance_cache: Dict[Path, PluginProvenance] = {}
         # Views over _provenance_cache, invalidated with it: keeping them
@@ -386,8 +388,12 @@ class RepositoryContext(
         if self.exclude_patterns:
             codex_before = list(self.codex_plugins)
             agent_plugins_before = list(self.agent_plugins)
+            agent_roots_before = self._agent_plugin_root_set().copy()
             roots_before = {r for r in (safe_resolve(p) for p in codex_before) if r}
-            marketplaces_before = tuple(self._codex_marketplace_paths or ())
+            marketplaces_before = (
+                *tuple(self._codex_marketplace_paths or ()),
+                *self._agent_plugin_catalog_paths,
+            )
             self.plugins = [p for p in self.plugins if not self.is_path_excluded(p)]
             self.codex_plugins = [p for p in self.codex_plugins if not self.is_path_excluded(p)]
             self.agent_plugins = [p for p in self.agent_plugins if not self.is_path_excluded(p)]
@@ -407,11 +413,15 @@ class RepositoryContext(
             # exclusion.
             if codex_catalog_changed:
                 self._codex_marketplace_paths = None
+                self._agent_plugin_claims = None
+                self._agent_plugin_roots = None
             if self._codex_discovery_enabled and codex_set_changed:
                 self._codex_install_root = _UNSET
                 self.codex_plugins = [
                     p for p in self._discover_codex_plugins() if not self.is_path_excluded(p)
                 ]
+            if self._agent_plugin_discovery_enabled and codex_catalog_changed:
+                self.agent_plugins = self._discover_agent_plugins()
             roots_after = {r for r in (safe_resolve(p) for p in self.codex_plugins) if r}
             dropped = roots_before - roots_after
             if dropped:
@@ -428,13 +438,16 @@ class RepositoryContext(
                 ]
             if codex_set_changed:
                 self._codex_roots = None
-            if self.agent_plugins != agent_plugins_before:
+            if self.agent_plugins != agent_plugins_before or codex_catalog_changed:
+                self._agent_plugin_roots = None
                 active_roots = {
-                    root for p in self.agent_plugins if (root := safe_resolve(p)) is not None
+                    root
+                    for p in (*self.agent_plugin_roots(), *self.codex_plugins, *self.plugins)
+                    if (root := safe_resolve(p)) is not None
                 }
                 dropped_roots = {
                     root
-                    for p in agent_plugins_before
+                    for p in agent_roots_before
                     if (root := safe_resolve(p)) is not None and root not in active_roots
                 }
                 self.skills = [
@@ -732,25 +745,22 @@ class RepositoryContext(
         )
 
     def _discover_agent_plugins(self) -> List[Path]:
-        """Portable packages declared at the root or under ``plugins/*``."""
+        """Portable packages in collections, host installs and local catalogs."""
+        # Keep discovery's contributing catalogs so late excludes can drop
+        # their packages even when --type switched Codex discovery off.
+        self._agent_plugin_catalog_paths = tuple(self._codex_catalog_files())
         return [
             path
             for path in agent_plugins_discovery.discover_agent_plugins(
                 self.root_path,
                 forced=self._agent_plugin_forced,
+                package_roots=codex_discovery.codex_local_sources(
+                    self.root_path, self._agent_plugin_catalog_paths
+                ),
+                collection_roots=(self.root_path.joinpath(*codex_discovery.CODEX_INSTALL_DIR),),
             )
             if not self.is_path_excluded(path)
         ]
-
-    def _agent_plugin_claim_set(self) -> Set[Path]:
-        """Filesystem-declared portable plugin roots, independent of ``--type``."""
-        if self._agent_plugin_claims is None:
-            self._agent_plugin_claims = {
-                resolved
-                for path in agent_plugins_discovery.discover_agent_plugins(self.root_path)
-                if not self.is_path_excluded(path) and (resolved := safe_resolve(path)) is not None
-            }
-        return self._agent_plugin_claims
 
     def _codex_local_sources(self) -> List[Path]:
         """Local plugin directories declared by the Codex marketplace."""
@@ -785,8 +795,15 @@ class RepositoryContext(
         quadratic in the catalog size.
         """
         if self._codex_claims is None:
+            from .formats.codex_manifest import declares_openai_extension
+
             claims = {r for r in (safe_resolve(p) for p in self.codex_plugins) if r is not None}
             claims.update(self._codex_local_sources())
+            claims.update(
+                path
+                for path in self._agent_plugin_claim_set()
+                if declares_openai_extension(path) or self.is_codex_installed_plugin(path)
+            )
             self._codex_claims = claims
         return self._codex_claims
 
@@ -802,9 +819,12 @@ class RepositoryContext(
             # Resolved once — this runs per SkillNode, so re-resolving per
             # call costs a filesystem round-trip for every skill.
             self._codex_install_root = codex_discovery.codex_install_root(self.root_path)
-        return codex_discovery.is_installed_codex_plugin(
+        if codex_discovery.is_installed_codex_plugin(
             plugin_dir, self.root_path, self._codex_install_root
-        )
+        ):
+            return True
+        self._agent_plugin_claim_set()
+        return safe_resolve(plugin_dir) in self._agent_plugin_installed_roots
 
     def _load_marketplace(self) -> Optional[Dict[str, Any]]:
         """Load marketplace.json if it exists"""

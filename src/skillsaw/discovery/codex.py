@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, List, Optional, Set
 
 from skillsaw.formats.codex import CODEX_PLUGIN_MANIFEST, codex_local_source_path
+from skillsaw.formats.codex_manifest import declares_openai_extension, portable_manifest_is_usable
 from skillsaw.paths import (
     contained_resolve,
     safe_exists,
@@ -184,6 +185,7 @@ def discover_codex_plugins(
     """
     found: List[Path] = []
     seen: Set[Path] = set()
+    local_sources = tuple(local_sources)
 
     root = safe_resolve(root_path) or root_path
 
@@ -193,13 +195,19 @@ def discover_codex_plugins(
             return None
         return resolved if resolved == root or resolved.is_relative_to(root) else None
 
-    def _add(directory: Path) -> None:
+    def _add(directory: Path, *, installed: bool = False) -> None:
         # Either half can be the symlink out of the repository:
         # ``plugins/foo`` itself, or ``plugins/foo/.codex-plugin`` under
         # a real directory. Both would make skillsaw read an out-of-tree
         # manifest, so both are containment-checked.
         resolved = _contained(directory)
         if resolved is None or resolved in seen:
+            return
+        if declares_openai_extension(directory) or (
+            (installed or directory in local_sources) and portable_manifest_is_usable(directory)
+        ):
+            seen.add(resolved)
+            found.append(directory)
             return
         # The marker must resolve within *this plugin*, not merely the
         # repository: `plugins/a/.codex-plugin -> plugins/b/.codex-plugin`
@@ -241,7 +249,7 @@ def discover_codex_plugins(
             continue
         for item in entries:
             if item.is_dir() and not item.name.startswith("."):
-                _add(item)
+                _add(item, installed=parent == root_path.joinpath(*CODEX_INSTALL_DIR))
 
     for source in local_sources:
         _add(source)

@@ -388,7 +388,9 @@ def _extract_codex_plugin(
     rule files attach when the plugin ships them.
     """
     plugin_dir = node.plugin_dir
-    meta = _read_json_dict(node)
+    from skillsaw.formats.codex_manifest import codex_manifest_view
+
+    meta = codex_manifest_view(plugin_dir).data
 
     author_val = meta.get("author")
     if isinstance(author_val, str):
@@ -661,6 +663,8 @@ def _extract_agent_plugins(
     """
     docs: List[PluginDoc] = []
     for node in context.lint_tree.find(AgentPluginConfigNode):
+        if context.is_codex_installed_plugin(node.plugin_dir):
+            continue
         # The tree's ownership decision, read back rather than re-derived.
         plugin_resolved = node.plugin_owner or safe_resolve(node.plugin_dir)
         if plugin_resolved is None or plugin_resolved in documented:
