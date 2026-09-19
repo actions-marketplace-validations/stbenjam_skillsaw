@@ -87,6 +87,7 @@ class RepositoryCursorMixin:
                 | set(self.grok_plugin_roots())
                 | set(self.agent_plugin_roots())
                 | set(self.antigravity_plugin_roots())
+                | set(self.pi_discovery_roots())
                 | after
             )
             self.skills = [

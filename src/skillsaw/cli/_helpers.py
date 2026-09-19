@@ -100,11 +100,14 @@ class _MergedContext:
         agent_plugins=(),
         grok_plugins=(),
         antigravity_plugins=(),
+        skill_paths=None,
     ):
         self.root_path = root_path
         self.repo_types = repo_types
         self.plugins = plugins
         self.skills = skills
+        self.skill_paths = list(skills if skill_paths is None else skill_paths)
+        self.skill_count = len(self.skill_paths)
         self.plugin_repo_types = set(plugin_repo_types)
         self.codex_plugins = list(codex_plugins)
         self.agent_plugins = list(agent_plugins)
@@ -156,7 +159,7 @@ def _build_merged_context(contexts):
     for ctx in contexts:
         repo_types |= ctx.repo_types
         plugin_repo_types |= ctx.plugin_repo_types
-        plugins.extend(ctx.plugins)
+        plugins.extend(ctx.distinct_plugin_dirs())
         skills.extend(ctx.skills)
         codex_plugins.extend(ctx.codex_plugins)
         agent_plugins.extend(ctx.agent_plugins)
@@ -178,6 +181,7 @@ def _build_merged_context(contexts):
         agent_plugins,
         grok_plugins,
         antigravity_plugins,
+        [path for ctx in contexts for path in ctx.skill_paths],
     )
 
 
