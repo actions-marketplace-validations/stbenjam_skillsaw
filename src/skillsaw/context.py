@@ -24,6 +24,7 @@ from .discovery.excludes import is_root_or_ancestor_excluded, path_matches_patte
 from .paths import safe_is_dir, safe_resolve
 from .utils import read_yaml
 from .repository_external_content import RepositoryExternalContentMixin
+from .repository_openclaw import RepositoryOpenClawMixin
 from .repository_grok import RepositoryGrokMixin
 from .repository_cursor import RepositoryCursorMixin
 from .repository_antigravity import RepositoryAntigravityMixin
@@ -61,6 +62,7 @@ class RepositoryContext(
     RepositoryScanMixin,
     RepositoryMcpRegistryMixin,
     RepositoryExternalContentMixin,
+    RepositoryOpenClawMixin,
     RepositoryGrokMixin,
     RepositoryCursorMixin,
     RepositoryAntigravityMixin,
@@ -87,6 +89,7 @@ class RepositoryContext(
         RepositoryType.GROK_PLUGIN,
         RepositoryType.ANTIGRAVITY_PLUGIN,
         RepositoryType.AGENT_PLUGIN,
+        RepositoryType.OPENCLAW_PLUGIN,
         RepositoryType.PI_PACKAGE,
         RepositoryType.AGENTSKILLS,
         RepositoryType.MCP_REGISTRY,
@@ -217,6 +220,7 @@ class RepositoryContext(
         self.agent_plugins: List[Path] = (
             self._discover_agent_plugins() if self._agent_plugin_discovery_enabled else []
         )
+        self._init_openclaw(repo_types)
         self._init_cursor(repo_types)
         self._init_grok(repo_types)
         self._init_antigravity(repo_types)
@@ -538,6 +542,8 @@ class RepositoryContext(
             types.add(RepositoryType.CODEX_MARKETPLACE)
         if self.codex_plugins:
             types.add(RepositoryType.CODEX_PLUGIN)
+        if self.openclaw_plugin_roots():
+            types.add(RepositoryType.OPENCLAW_PLUGIN)
         if self.agent_plugins:
             types.add(RepositoryType.AGENT_PLUGIN)
         if self.cursor_marketplace_paths():
@@ -682,6 +688,7 @@ class RepositoryContext(
             self.codex_plugins,
             self.agent_plugins,
             self.grok_plugins,
+            self.openclaw_plugin_roots(),
             self.cursor_plugin_roots(),
             # Both spellings: the direct list keeps its unresolved path for
             # display, and the claim union adds the plugins a

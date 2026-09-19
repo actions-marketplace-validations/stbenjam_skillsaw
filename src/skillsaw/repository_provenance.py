@@ -17,6 +17,7 @@ from .discovery.antigravity import (
 )
 from .discovery import agent_plugins as agent_plugins_discovery
 from .discovery import codex as codex_discovery
+from .discovery.openclaw import claims_plugin
 from .formats.codex import codex_manifest_is_contained, codex_marker_escapes
 from .formats.codex_manifest import declares_openai_extension
 from .formats.grok import grok_manifest_is_contained, grok_marker_escapes
@@ -69,6 +70,10 @@ class PluginProvenance:
         ``TestPluginProvenanceCodexOnlyTruthTable`` pins every combination.
         """
         return self.codex and not self.claude
+
+    @property
+    def openclaw(self) -> bool:
+        return "openclaw" in self.ecosystems
 
     @property
     def claude(self) -> bool:
@@ -179,6 +184,8 @@ class RepositoryProvenanceMixin:
         def antigravity_plugin_roots(self) -> List[Path]: ...
 
         def codex_plugin_roots(self) -> List[Path]: ...
+
+        def openclaw_plugin_roots(self) -> List[Path]: ...
 
         def grok_plugin_roots(self) -> List[Path]: ...
 
@@ -372,6 +379,8 @@ class RepositoryProvenanceMixin:
             and not antigravity_marker_escapes(plugin_dir)
         ):
             ecosystems.add("antigravity")
+        if claims_plugin(plugin_dir):
+            ecosystems.add("openclaw")
         if resolved is not None and resolved in self._cursor_claim_set():
             ecosystems.add("cursor")
         record = PluginProvenance(
@@ -478,7 +487,7 @@ class RepositoryProvenanceMixin:
     def contained_plugin_owning(self, path: Path) -> Optional[Path]:
         """Nearest plugin root whose package files have containment semantics.
 
-        Codex, Agent Plugins, Grok and Antigravity all require supplied
+        Codex, Agent Plugins, Grok, Antigravity and OpenClaw require supplied
         files to resolve inside the package — Grok's enforcement is
         measured, a declared path whose target exists outside the plugin
         loaded nothing; Antigravity's is skillsaw's own deliberate
@@ -491,7 +500,8 @@ class RepositoryProvenanceMixin:
         """
         if self._contained_plugin_roots is None:
             self._contained_plugin_roots = (
-                {root for root in self.cursor_plugin_roots() if self.provenance(root).cursor_only}
+                {p for p in self.openclaw_plugin_roots() if not self.provenance(p).claude}
+                | {root for root in self.cursor_plugin_roots() if self.provenance(root).cursor_only}
                 | set(self.codex_plugin_roots())
                 | set(self._agent_plugin_root_set())
                 | {root for root in self.grok_plugin_roots() if self.provenance(root).grok_only}
@@ -539,6 +549,7 @@ class RepositoryProvenanceMixin:
             bool(self.cursor_plugin_roots())
             or self._codex_claims_possible()
             or bool(self._agent_plugin_root_set())
+            or bool(self.openclaw_plugin_roots())
             or bool(self.grok_plugin_roots())
             or bool(self.antigravity_plugin_roots())
         )
@@ -553,12 +564,16 @@ class RepositoryProvenanceMixin:
     def _declares_containment(self, path: Path) -> bool:
         """Whether an ecosystem that contains its package files owns *path*.
 
-        Codex, Grok or Antigravity with no Claude declaration. The
+        Codex, Grok, Antigravity or OpenClaw with no Claude declaration. The
         ``_only`` half is what keeps a dual-manifest directory on Claude's
         looser reading, where a supplied file has no package-wide
         containment contract.
         """
         record = self.provenance(path)
         return (
-            record.codex_only or record.grok_only or record.antigravity_only or record.cursor_only
+            record.codex_only
+            or record.grok_only
+            or record.antigravity_only
+            or (record.openclaw and not record.claude)
+            or record.cursor_only
         )

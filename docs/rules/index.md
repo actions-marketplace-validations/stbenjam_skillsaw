@@ -3,7 +3,7 @@
 
 # Rules Reference
 
-skillsaw includes **106** built-in rules organized into the following categories:
+skillsaw includes **109** built-in rules organized into the following categories:
 
 - [Agent Plugins](agent-plugins.md) (3 rules)
 - [agentskills.io](agentskills.md) (8 rules)
@@ -22,7 +22,7 @@ skillsaw includes **106** built-in rules organized into the following categories
 - [MCP (Model Context Protocol)](mcp.md) (5 rules)
 - [Muse Code](muse.md) (1 rule)
 - [OpenAI Codex](codex.md) (6 rules)
-- [OpenClaw](openclaw.md) (1 rule)
+- [OpenClaw](openclaw.md) (4 rules)
 - [OpenCode](opencode.md) (1 rule)
 - [Pi](pi.md) (3 rules)
 - [Promptfoo Evals](promptfoo.md) (3 rules)
@@ -125,6 +125,9 @@ skillsaw includes **106** built-in rules organized into the following categories
 | [`codex-marketplace-json-valid`](codex-marketplace-json-valid.md) | .agents/plugins/marketplace.json must be valid JSON with required fields | error (auto) | - | OpenAI Codex |
 | [`codex-marketplace-registration`](codex-marketplace-registration.md) | Codex plugins must be registered in .agents/plugins/marketplace.json | error (auto) | auto | OpenAI Codex |
 | [`openclaw-metadata`](openclaw-metadata.md) | Validate metadata.openclaw fields against the OpenClaw spec | warning (auto) | - | OpenClaw |
+| [`openclaw-manifest-valid`](openclaw-manifest-valid.md) | Native OpenClaw manifests must declare an id and object configSchema | error (disabled) | - | OpenClaw |
+| [`openclaw-package-valid`](openclaw-package-valid.md) | OpenClaw package metadata must declare valid extension entries | error (disabled) | - | OpenClaw |
+| [`openclaw-resources`](openclaw-resources.md) | OpenClaw resources should resolve inside their package and exist when loaded | warning (disabled) | - | OpenClaw |
 | [`opencode-config-valid`](opencode-config-valid.md) | opencode.json and opencode.jsonc must parse and use keys and MCP server shapes OpenCode reads | error (auto) | - | OpenCode |
 | [`pi-config-valid`](pi-config-valid.md) | Pi package and project resource declarations must have valid types | warning (auto) | - | Pi |
 | [`pi-skill-valid`](pi-skill-valid.md) | Pi skills need parseable frontmatter and a nonempty description | warning (auto) | - | Pi |

@@ -96,6 +96,9 @@ from .formats.codex_manifest import codex_manifest_view
 from .discovery import AGENT_MEMORY_DIR, AGENT_MEMORY_INDEX
 from .discovery.excludes import is_root_or_ancestor_excluded
 from .discovery.opencode import contained_instruction_globs
+from .lint_target import OpenClawPluginNode, OpenClawPluginConfigNode, OpenClawPackageConfigNode
+from .blocks.json_config import OpenClawInlineMcpBlock
+from .formats.openclaw import MANIFEST, contained_file, inline_mcp_servers
 from .blocks.pi import PiPackageNode, PiPackageBlock
 from .pi_tree import attach_pi_resources, attach_pi_projects
 from .formats import antigravity, devin, grok, muse, cursor
@@ -751,6 +754,7 @@ def build_lint_tree(context: "RepositoryContext") -> LintTarget:
     # Nearest package ownership, with the roots resolved once per context.
     _contained_plugin_owner = context.contained_plugin_owning
     agent_plugin_roots = set(context.agent_plugin_roots())
+    openclaw_plugin_roots = set(context.openclaw_plugin_roots())
 
     def _shadowed_by_agent_plugin_mcp(path: Path, agent_plugin_mcp: Path | None) -> bool:
         """Whether *path* is the portable ``mcp.json`` under another name.
@@ -1379,6 +1383,7 @@ def build_lint_tree(context: "RepositoryContext") -> LintTarget:
     cursor_plugin_nodes = {}
     plugin_nodes: dict[Path, PluginNode] = {}
     codex_plugin_nodes: dict[Path, CodexPluginNode] = {}
+    openclaw_plugin_nodes: dict[Path, OpenClawPluginNode] = {}
     grok_plugin_nodes: dict[Path, GrokPluginNode] = {}
     antigravity_plugin_nodes: dict[Path, AntigravityPluginNode] = {}
     pi_package_nodes: dict[Path, PiPackageNode] = {}
@@ -1404,6 +1409,7 @@ def build_lint_tree(context: "RepositoryContext") -> LintTarget:
         *context.plugins,
         *context.codex_plugins,
         *context.grok_plugins,
+        *context.openclaw_plugin_roots(),
         *context.cursor_plugin_roots(),
         *context.antigravity_plugins,
         *context.agent_plugins,
@@ -1439,13 +1445,14 @@ def build_lint_tree(context: "RepositoryContext") -> LintTarget:
         # ``.agents/plugins/<name>/`` would be discarded as generated output
         # in every APM repository with a Codex target.
         if _is_in_compiled_dir(plugin_path) and not (
-            prov.codex or prov.grok or prov.antigravity or prov.cursor
+            prov.codex or prov.grok or prov.antigravity or prov.openclaw or prov.cursor
         ):
             continue
         resolved_plugin = safe_resolve(plugin_path)
         if resolved_plugin is None:
             continue
 
+        is_openclaw = prov.openclaw or plugin_path in openclaw_plugin_roots
         is_agent_plugin = resolved_plugin in agent_plugin_roots
         agent_plugin_mcp = safe_resolve(plugin_path / "mcp.json") if is_agent_plugin else None
 
@@ -1459,7 +1466,13 @@ def build_lint_tree(context: "RepositoryContext") -> LintTarget:
             container = PluginNode(path=plugin_path)
             plugin_nodes[resolved_plugin] = container
         elif resolved_plugin == root.resolved_path and (
-            prov.codex or prov.grok or prov.antigravity or prov.cursor or is_pi or is_agent_plugin
+            prov.codex
+            or prov.grok
+            or prov.antigravity
+            or is_openclaw
+            or is_agent_plugin
+            or prov.cursor
+            or is_pi
         ):
             container = root
         elif prov.codex:
@@ -1480,6 +1493,9 @@ def build_lint_tree(context: "RepositoryContext") -> LintTarget:
         elif is_agent_plugin:
             container = AgentPluginNode(path=plugin_path)
             agent_plugin_nodes[resolved_plugin] = container
+        elif is_openclaw:
+            container = OpenClawPluginNode(path=plugin_path)
+            openclaw_plugin_nodes[resolved_plugin] = container
         else:
             # Legacy unclaimed directories discovered by the Claude layout
             # retain their established container and validation behavior.
@@ -1513,6 +1529,25 @@ def build_lint_tree(context: "RepositoryContext") -> LintTarget:
                     child.plugin_owner = resolved_plugin
                 elif isinstance(child, HooksBlock) and safe_resolve(child.path) in claimed_hooks:
                     child.plugin_owner = resolved_plugin
+
+        if is_openclaw:
+            # Keep missing manifests in the tree so forced/package claims diagnose them.
+            node = OpenClawPluginConfigNode(path=plugin_path / MANIFEST)
+            node.plugin_owner = resolved_plugin
+            if not _is_excluded(node.path):
+                container.children.append(node)
+                payload = inline_mcp_servers(plugin_path)
+                if payload is not None:
+                    block = OpenClawInlineMcpBlock(
+                        path=node.path, inline_data={"mcpServers": payload}
+                    )
+                    block.plugin_owner = resolved_plugin
+                    state.attach_prebuilt(node, block)
+            package_path = plugin_path / "package.json"
+            if contained_file(plugin_path, "package.json"):
+                state.add_parser_block(
+                    container, package_path, OpenClawPackageConfigNode, owner=resolved_plugin
+                )
 
         cursor_components = [
             (
@@ -1896,6 +1931,7 @@ def build_lint_tree(context: "RepositoryContext") -> LintTarget:
                 or plugin_nodes.get(candidate)
                 or codex_plugin_nodes.get(candidate)
                 or grok_plugin_nodes.get(candidate)
+                or openclaw_plugin_nodes.get(candidate)
                 or antigravity_plugin_nodes.get(candidate)
                 or pi_package_nodes.get(candidate)
                 or agent_plugin_nodes.get(candidate)

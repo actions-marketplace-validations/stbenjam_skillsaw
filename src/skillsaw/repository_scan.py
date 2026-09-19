@@ -7,6 +7,7 @@ from typing import List, Optional, Set, TYPE_CHECKING, Tuple
 
 from .discovery import claude as claude_discovery
 from .discovery import detect as detect_discovery
+from .formats.openclaw import MANIFEST
 from .repository_types import RepositoryType, TOOL_REPO_TYPES
 from .utils import read_json
 from .paths import contained_resolve, safe_resolve
@@ -38,6 +39,8 @@ class RepositoryScanMixin:
         _pi_packages_cache: Optional[Tuple[Tuple[str, ...], List[Path], Set[Path]]]
         plugins: List[Path]
         codex_plugins: List[Path]
+
+        def openclaw_plugin_roots(self) -> List[Path]: ...
 
         def grok_plugin_roots(self) -> List[Path]: ...
 
@@ -236,12 +239,22 @@ class RepositoryScanMixin:
             plugins=[
                 plugin
                 for plugin in self.plugins
-                if not self.provenance(plugin).agent_plugin or self.provenance(plugin).claude
+                if self.provenance(plugin).claude
+                or not (self.provenance(plugin).agent_plugin or self.provenance(plugin).openclaw)
             ],
             codex_plugins=[p for p in self.codex_plugins if portable_manifest(p) is None],
             # Config and catalog declarations retain custom skill paths
             # under unrelated --type overrides, just like their tree nodes.
             grok_plugins=self.grok_plugin_roots(),
+            openclaw_plugins=[
+                p for p in self.openclaw_plugin_roots() if not self.is_path_excluded(p / MANIFEST)
+            ],
+            openclaw_exclusive_plugins=[
+                p
+                for p in self.openclaw_plugin_roots()
+                if self.provenance(p).ecosystems == frozenset({"openclaw"})
+                and not self.is_path_excluded(p / MANIFEST)
+            ],
             # The claim union, not the gated discovery list: a plugin a
             # ``plugins.json`` registry names has a container and its hooks
             # and MCP file either way, and its ``skills/`` must not vanish
