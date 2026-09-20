@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from skillsaw.discovery.excludes import is_root_or_ancestor_excluded
+from skillsaw.discovery.cursor_globs import contained_glob
 from skillsaw.paths import (
     contained_resolve,
     has_parent_traversal,
@@ -59,7 +60,13 @@ def source_path(root: Path, prefix: str, source: str) -> Path | None:
         return None
     if prefix and safe_component(root, prefix) is None:
         return None
-    return safe_component(root, f"{prefix}/{source}" if prefix else source)
+    if prefix:
+        prefix = prefix.replace("\\", "/").rstrip("/")
+        source = source.replace("\\", "/")
+        # Cursor's template accepts sources that already include pluginRoot.
+        if source != prefix and not source.startswith(f"{prefix}/"):
+            source = f"{prefix}/{source}"
+    return safe_component(root, source)
 
 
 def component_paths(root: Path, data: dict, field: str) -> list[Path]:
@@ -72,8 +79,7 @@ def component_paths(root: Path, data: dict, field: str) -> list[Path]:
             continue
         if any(char in item for char in "*?["):
             try:
-                matches = root.glob(item)
-                result.update(p for p in matches if contained_resolve(p, root) is not None)
+                result.update(contained_glob(root, item))
             except (OSError, ValueError, RecursionError):
                 continue
         else:
