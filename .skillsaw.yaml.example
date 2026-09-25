@@ -1,7 +1,7 @@
 # skillsaw configuration
 # https://github.com/stbenjam/skillsaw
 
-version: "0.20.0"
+version: "0.21.0"
 
 rules:
 
@@ -228,7 +228,7 @@ rules:
     enabled: auto
     severity: error
 
-  # .codex-plugin/plugin.json must be valid JSON with required fields
+  # The selected Codex manifest or portable OpenAI overlay must be valid
   codex-plugin-json-valid:
     enabled: auto
     severity: error
@@ -448,11 +448,21 @@ rules:
     severity: error
     # report-unknown-fields: false
 
-  # .cursor/hooks.json must declare version 1 and known hook events with commands
+  # Cursor hooks must use known events and valid commands; project hooks require version 1
   cursor-hooks-valid:
     enabled: auto
     severity: error
     # extra-events: []
+
+  # Cursor marketplaces must contain valid entries with unique names and resolvable local sources
+  cursor-marketplace-json-valid:
+    enabled: auto
+    severity: error
+
+  # Cursor plugin manifests must declare valid metadata and contained components
+  cursor-plugin-json-valid:
+    enabled: auto
+    severity: error
 
   # Cursor .mdc rules must have frontmatter that lets the rule activate
   cursor-rules-valid:
@@ -575,16 +585,48 @@ rules:
     # extra-handler-fields: []
     # extra-group-keys: []
 
+  # Native OpenClaw manifests must declare an id and object configSchema
+  openclaw-manifest-valid:
+    enabled: false
+    severity: error
+
   # Validate metadata.openclaw fields against the OpenClaw spec
   openclaw-metadata:
     enabled: auto
     severity: warning
+
+  # OpenClaw package metadata must declare valid extension entries
+  openclaw-package-valid:
+    enabled: false
+    severity: error
+
+  # OpenClaw resources should resolve inside their package and exist when loaded
+  openclaw-resources:
+    enabled: false
+    severity: warning
+    # check-skills-exist: true
+    # check-entrypoints-exist: false
 
   # opencode.json and opencode.jsonc must parse and use keys and MCP server shapes OpenCode reads
   opencode-config-valid:
     enabled: auto
     severity: error
     # extra-keys: []
+
+  # Pi package and project resource declarations must have valid types
+  pi-config-valid:
+    enabled: auto
+    severity: warning
+
+  # Literal Pi resource paths should exist in the assembled checkout
+  pi-resource-paths:
+    enabled: false
+    severity: warning
+
+  # Pi skills need parseable frontmatter and a nonempty description
+  pi-skill-valid:
+    enabled: auto
+    severity: warning
 
   # Require specific assertion types in all promptfoo eval tests
   promptfoo-assertions:

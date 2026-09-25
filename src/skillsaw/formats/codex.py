@@ -84,7 +84,14 @@ def inline_documents(declared: Any, key: str) -> List[Dict[str, Any]]:
         # legitimately hold a server or event named the same as the wrapper,
         # and unwrapping on its presence alone would silently discard every
         # sibling — including ones the security rules need to see.
-        wrapped = isinstance(nested, dict) and len(item) == 1
+        # A sole MCP server can itself be named mcpServers. A connection
+        # inside that object identifies a server config, not a wrapped map.
+        server_config = (
+            key == "mcpServers"
+            and isinstance(nested, dict)
+            and any(isinstance(nested.get(connection), str) for connection in ("command", "url"))
+        )
+        wrapped = isinstance(nested, dict) and len(item) == 1 and not server_config
         documents.append({key: nested if wrapped else item})
     return documents
 
@@ -316,13 +323,15 @@ def codex_mcp_input_problem(value: Dict[str, Any]) -> Optional[str]:
 
 
 def codex_manifest(plugin_dir: Path) -> Dict[str, Any]:
-    """A Codex plugin's parsed manifest, or ``{}`` when absent or unparseable.
+    """Effective Codex metadata, or ``{}`` when absent or unparseable.
 
     Uses the shared cached reader: strips a UTF-8 BOM, and repeated reads
-    cost nothing.
+    cost nothing. Portable identity and OpenAI overlay precedence live in
+    ``codex_manifest_view`` so discovery, rules and docs read one selection.
     """
-    data, error = read_json(plugin_dir.joinpath(*CODEX_PLUGIN_MANIFEST))
-    return data if not error and isinstance(data, dict) else {}
+    from .codex_manifest import codex_manifest_view
+
+    return codex_manifest_view(plugin_dir).data
 
 
 def codex_plugin_name(plugin_dir: Path) -> str:

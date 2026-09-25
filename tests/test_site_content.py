@@ -377,11 +377,33 @@ def test_inpage_hrule_rewritten_to_asterisks():
     assert site_content._plain_markdown(setext) == setext
 
 
-def test_llms_txt_marks_deprecated_and_mentions_full_file(llms_txt):
+def test_llms_txt_omits_removed_rules_and_mentions_full_file(llms_txt):
     assert "https://skillsaw.org/llms-full.txt" in llms_txt
-    assert "(deprecated since v" in llms_txt
+    for rule_id in (
+        "content-critical-position",
+        "content-actionability-score",
+        "skill-frontmatter",
+    ):
+        assert f"rules/{rule_id}.md" not in llms_txt
     # Group blurbs carry a flattened first sentence, not bare counts alone.
     assert re.search(r"- \[Security\]\([^)]+\): \d+ rules — ", llms_txt)
+
+
+def test_apm_sources_do_not_name_removed_rules():
+    # .apm/ compiles into the shipped skills; a retired ID there teaches a
+    # rule that no longer exists.
+    apm_root = Path(__file__).resolve().parent.parent / ".apm"
+    offenders = []
+    for path in apm_root.rglob("*.md"):
+        text = path.read_text(encoding="utf-8")
+        for rule_id in (
+            "content-critical-position",
+            "content-actionability-score",
+            "skill-frontmatter",
+        ):
+            if rule_id in text:
+                offenders.append(f"{path.relative_to(apm_root.parent)}: {rule_id}")
+    assert offenders == []
 
 
 def test_write_llms_outputs_writes_both_files(tmp_path):

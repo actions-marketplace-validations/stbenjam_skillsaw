@@ -18,6 +18,14 @@ TOC_END = "<!-- END GENERATED TOC -->"
 
 RULE_GROUPS = [
     (
+        "Pi",
+        ["pi-config-valid", "pi-skill-valid", "pi-resource-paths"],
+        "Discovers Pi packages and `.pi/` project resources, validates resource "
+        "arrays and native skill metadata, and exposes prompts and flat skills "
+        "to content checks. Literal resource-path checks are opt-in. "
+        "Extensions are never executed and remote packages are not installed.",
+    ),
+    (
         "Agent Plugins",
         ["agent-plugin-json-valid", "agent-plugin-mcp-valid", "agent-plugin-required"],
         "Validates portable plugin packages against the "
@@ -284,10 +292,9 @@ RULE_GROUPS = [
     ),
     (
         "OpenClaw",
-        ["openclaw-metadata"],
-        "Validates `metadata.openclaw` in SKILL.md frontmatter against the "
-        "[OpenClaw spec](https://docs.openclaw.ai/tools/skills). Only fires "
-        "when `metadata.openclaw` is present.",
+        ["openclaw-metadata", "openclaw-manifest-valid", "openclaw-package-valid", "openclaw-resources"],
+        "Native plugin manifests, package entrypoints, resource paths, and skill metadata. "
+        "The metadata rule applies only when `metadata.openclaw` is present in SKILL.md.",
     ),
     (
         "OpenCode",
@@ -340,19 +347,7 @@ RULE_GROUPS = [
         "and paths that remain portable across machines. Lockfiles are discovered "
         "recursively for monorepos and the rule auto-enables when one is present.",
     ),
-    (
-        "Deprecated",
-        [
-            "content-critical-position",
-            "content-actionability-score",
-            "skill-frontmatter",
-        ],
-        "These rules are deprecated and will be removed in a future release. "
-        "They no longer run under `enabled: auto`; set `enabled: true` in "
-        "`.skillsaw.yaml` to keep running one during the transition. The "
-        "content rules encoded attention-era heuristics that newer models no "
-        "longer need; `skill-frontmatter` is replaced by `agentskill-valid`.",
-    ),
+
 ]
 
 

@@ -163,6 +163,7 @@ be defined:
 | `.codex/config.toml` `[mcp_servers]` (repo root or any package) | mcp-prohibited, mcp-valid-json |
 | Codex manifest-declared or inline `hooks` | hooks-dangerous, hooks-prohibited |
 | Codex manifest-declared or inline `mcpServers` | mcp-prohibited, mcp-valid-json |
+| OpenClaw manifest inline `mcpServers` | `mcp-prohibited`, `mcp-valid-json` (credential and URL checks) |
 | `.muse/hooks.json` | hooks-dangerous, hooks-prohibited |
 | `.grok/hooks/*.json` (repo root or any package) | hooks-dangerous, hooks-prohibited |
 | `.grok/config.toml` `[mcp_servers]` (repo root or any package) | mcp-prohibited, mcp-valid-json, grok-config-valid |
@@ -171,6 +172,8 @@ be defined:
 | Grok plugin `.mcp.json`, declared or inline `mcpServers` | mcp-prohibited, mcp-valid-json |
 | Antigravity `hooks.json` (`.agents/`, `.agent/`, `_agents/`, `_agent/`, or a plugin) | hooks-dangerous, hooks-prohibited, antigravity-hooks-valid |
 | Antigravity `mcp_config.json` (same locations) | mcp-prohibited, mcp-valid-json, antigravity-mcp-valid |
+| Cursor plugin `hooks/hooks.json`, declared or inline `hooks` | hooks-dangerous, hooks-prohibited |
+| Cursor plugin `mcp.json`, declared or inline `mcpServers` | mcp-prohibited, mcp-valid-json |
 | `.cursor/hooks.json` | hooks-dangerous, hooks-prohibited |
 | Copilot / VS Code agent `hooks:` frontmatter | hooks-dangerous, hooks-prohibited |
 | Copilot cloud/shared agent `mcp-servers:` frontmatter | mcp-prohibited, mcp-valid-json |

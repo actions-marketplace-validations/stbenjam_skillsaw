@@ -118,7 +118,7 @@ as the action. Set `version` to install a specific PyPI release instead:
 ```yaml
 - uses: stbenjam/skillsaw@v0
   with:
-    version: '0.20.0'
+    version: '0.21.0'
 ```
 
 ### Outputs
@@ -261,18 +261,6 @@ skillsaw supports several machine-readable output formats — `--format`
 2.1.0](https://sarifweb.azurewebsites.net/) for tools that ingest it.
 See the [CLI reference](cli.md) for details.
 
-## Committed generated docs
-
-!!! warning "Deprecated in 0.20.0"
-    `skillsaw docs` is deprecated and will be removed in an upcoming release.
-    Existing CI jobs can keep using it during the deprecation period.
-
-Some repositories commit the output of `skillsaw docs` and gate CI on it
-being current — regenerating in CI and failing if the working tree changed.
-Upgrading skillsaw can change that output, so plan on regenerating and
-committing the result as part of a version bump.
-
-
 ## GitLab CI
 
 For GitLab merge-request widgets, use the `gitlab` output format (a Code
@@ -281,7 +269,7 @@ Quality report, available since skillsaw 0.11.3):
 ```yaml
 skillsaw:
   script:
-    - pip install skillsaw==0.20.0
+    - pip install skillsaw==0.21.0
     - skillsaw lint --output gitlab:gl-code-quality-report.json .
   artifacts:
     reports:

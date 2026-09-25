@@ -64,6 +64,30 @@ historical list form for compatibility. Like Devin skills, nested Windsurf
 skill collections are discovered. A skill under `.agents/skills/` also remains
 a portable Agent Skill even when the repository contains Devin configuration.
 
+## Pi packages and projects
+
+Pi support starts in skillsaw 0.21.0. Upgrading the executable changes selected
+Pi skills to the native metadata contract. If your configuration pins an older
+rules version, advance it to `0.21.0` or explicitly enable `pi-skill-valid` to
+validate those native skills. Unselected portable skills keep Agent Skills
+validation.
+
+`pi-package` detects `package.json#pi`, the `pi-package` npm keyword, and local
+package directories declared in `.pi/settings.json`. `pi` detects project
+resources under `.pi/`, including nested monorepo projects. Use `--type pi-package`
+for conventional-only packages or malformed manifests without an identifying key.
+
+Pi package resource arrays select extensions, skills, prompts and themes.
+Manifest paths and globs are package-relative; settings resource paths and local
+package sources are settings-relative. Flat Markdown skills and directory-form
+skills use Pi's native metadata contract, with optional names. Prompt and skill
+bodies receive shared content checks. See [pi-config-valid](rules/pi-config-valid.md)
+for discovery details and the pinned loader contract.
+
+Lints operate on repository-local authored resources. Remote packages are not
+installed, and extension code is never executed. Consumer package filters are
+validated without hiding the package's authored content from diagnostics.
+
 ## Agent Plugins
 
 Portable plugin packages following the [Agent Plugins v1
@@ -629,6 +653,49 @@ Repositories with promptfoo eval configs (`promptfooconfig*.yaml` or YAML files 
 
 Repositories with an `.apm/` directory or `apm.yml` file. APM manages dependencies and compiles instruction files for all supported agents (`.claude/`, `.cursor/rules/`, `.github/instructions/`, etc.). When APM is present it is the authoritative source — `.claude/` is treated as compiled output. Package content under `apm_modules/` is externally sourced: it is linted but never autofixed by default, and `lint-external-content: false` omits it from the lint tree.
 
+## OpenClaw Plugin
+
+Native packages are discovered through `openclaw.plugin.json` or `openclaw.extensions`
+in `package.json`, including nested packages and `.openclaw/extensions/`.
+The `openclaw-plugin` repository type exposes manifests, package metadata,
+explicitly declared skill roots, and static MCP declarations in the lint tree.
+A conventional `skills/` directory the manifest does not declare never loads
+natively, but it is still linted as portable Agent Skills.
+Shared skill, content, and MCP security rules apply automatically.
+
+Enable the new packaging checks explicitly:
+
+```yaml
+rules:
+  openclaw-manifest-valid:
+    enabled: true
+  openclaw-package-valid:
+    enabled: true
+  openclaw-resources:
+    enabled: true
+    check-skills-exist: true
+    check-entrypoints-exist: false
+```
+
+Native manifests accept JSON5. Package entrypoints may refer to generated
+files, so existence checks for those files are off until you enable them after
+building. Install dependencies before checking skill roots under `node_modules`,
+or set `check-skills-exist: false` in a source-only checkout.
+
+This support covers static plugin authoring: manifests, entrypoints, declared
+skills, and inline MCP servers. Runtime registrations, arbitrary schema
+compilation, gateway settings, and remote registries are outside its scope.
+Compatible Claude, Codex and Agent Plugins manifests retain their validators.
+
+```text
+weather/
+├── openclaw.plugin.json
+├── package.json
+└── skills/
+    └── weather-report/
+        └── SKILL.md
+```
+
 ## Editor and CLI tools
 
 Each tool below is a repository type of its own, detected from the
@@ -672,7 +739,7 @@ the value `Repo type:` prints, the JSON report lists under `repo_types`, and
 | **Portable** | `agents-md`, `claude-md`, `gemini`, `qwen` | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `QWEN.md` |
 | **Portable skills** | `agentskills` | `.agents/skills/*/SKILL.md` and the other conventional skill directories |
 | **Vercel skills CLI** | `skills-lock` | Every `skills-lock.json`, plus matching installed skill payloads unless `lint-external-content: false` |
-| **Cursor** | `cursor` | `.cursor/rules/**/*.mdc`, `.cursor/commands/**/*.md`, `.cursor/skills/*/SKILL.md`, `.cursor/mcp.json`, `.cursor/hooks.json`, legacy `.cursorrules` |
+| **Cursor** | `cursor` | `.cursor/rules/**/*.mdc`, `.cursor/commands/**/*.md`, `.cursor/agents/**/*.md`, `.cursor/skills/*/SKILL.md`, `.cursor/mcp.json`, `.cursor/hooks.json`, legacy `.cursorrules` |
 | **Copilot / VS Code** | `copilot` | `.github/copilot-instructions.md`, `**/*.instructions.md`, `.github/prompts/**/*.prompt.md`, `.github/agents/**/*.md`, legacy `.github/chatmodes/**/*.chatmode.md`, `.github/skills/*/SKILL.md`, `.vscode/mcp.json` |
 | **Cline** | `cline` | `.clinerules` (file), `.clinerules/**/*.md`, `.clinerules/**/*.txt` (excluding `workflows/`, `hooks/`, `skills/`), `.clinerules/workflows/**/*.md`, `.clinerules/skills/*/SKILL.md`, `.cline/skills/*/SKILL.md` |
 | **OpenCode** | `opencode` | `opencode.json` or `opencode.jsonc` at the root and in `.opencode/`, `.opencode/commands/**/*.md`, `.opencode/agents/**/*.md`, `.opencode/modes/*.md`, `.opencode/skills/*/SKILL.md`, and the 1.x singular spelling of each (`command/`, `agent/`, `mode/`, `skill/`). Repository-local files matched by `instructions` paths or globs are also linted; remote URLs are not fetched. |
@@ -681,6 +748,7 @@ the value `Repo type:` prints, the JSON report lists under `repo_types`, and
 | **Qwen Code** | `qwen` | `QWEN.md`, `.qwen/skills/*/SKILL.md` |
 | **Kiro** | `kiro` | `.kiro/steering/*.md` |
 | **Google Antigravity** | `antigravity` | Inside `.agents/`, `.agent/`, `_agents/` or `_agent/`: `hooks.json`, `mcp_config.json`, the registries `{agents,plugins,skills,workflows}.json`, prose in `rules/**/*.md` and `agents/*.md`, and skills under `skills/`. A `plugins.json` or `agents.json` registry's `entries` are followed, so a plugin or agent directory it names elsewhere in the repository is linted too. Detection is narrower — see [Google Antigravity](#google-antigravity) |
+| **[Pi](#pi-packages-and-projects)** | `pi` | `.pi/`: Native skills, prompts, themes and extensions, `SYSTEM.md`, `APPEND_SYSTEM.md`, resource declarations in `settings.json` |
 | **Muse Code** | `muse` | `.muse/hooks.json` — see [Muse Code](#muse-code) |
 | **Grok Build** | `grok-project` | `.grok/rules/*.md`, `.grok/commands/*.md`, `.grok/agents/*.md`, `.grok/skills/*/SKILL.md`, `.grok/hooks/*.json`, `.grok/config.toml` — see [Grok Build](#grok-build) |
 | **OpenAI Codex** | `codex-project` | `.codex/hooks.json`, `.codex/config.toml` — see [OpenAI Codex project configuration](#openai-codex-project-configuration) |
@@ -785,6 +853,30 @@ Files that are on-demand rather than always-on — Cursor commands, Copilot
 prompt files, Cline workflows, OpenCode commands — are budgeted by
 [`context-budget`](rules/context-budget.md) as commands, not as instruction
 files, because they enter the context window only when invoked.
+
+### Cursor plugins and marketplaces
+
+Native `.cursor-plugin/plugin.json` packages are detected as `cursor-plugin`;
+`.cursor-plugin/marketplace.json` catalogs as `cursor-marketplace`, including
+nested packages. Cursor provenance keeps native-only plugins out of Claude
+format checks while preserving shared content and security checks.
+
+Catalog sources accept relative strings or objects with `path` and an optional
+`metadata.pluginRoot` prefix. Entry metadata is merged with the native plugin
+manifest, whose values take precedence. Remote sources are not fetched.
+
+Native plugins load rules, agents, commands, skills, hooks, MCP, and variable
+schema metadata. Explicit component paths replace defaults; supported prose
+extensions and path globs follow the Cursor reference. Commands also support
+`.txt`. A root `SKILL.md` is used when there is no skills directory or override.
+Inline hooks and MCP entries receive the existing security and policy checks.
+Declared and conventional component files must stay within the package.
+
+[`cursor-plugin-json-valid`](rules/cursor-plugin-json-valid.md) validates native
+manifests and component references;
+[`cursor-marketplace-json-valid`](rules/cursor-marketplace-json-valid.md)
+validates catalogs, duplicate names, and local source resolution. Portable
+Agent Plugins retain their existing schema validation.
 
 ### Cursor hooks
 

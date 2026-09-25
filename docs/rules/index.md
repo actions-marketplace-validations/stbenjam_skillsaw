@@ -3,7 +3,7 @@
 
 # Rules Reference
 
-skillsaw includes **101** built-in rules organized into the following categories:
+skillsaw includes **106** built-in rules organized into the following categories:
 
 - [Agent Plugins](agent-plugins.md) (3 rules)
 - [agentskills.io](agentskills.md) (8 rules)
@@ -13,7 +13,7 @@ skillsaw includes **101** built-in rules organized into the following categories
 - [Content Intelligence](content-intelligence.md) (24 rules)
 - [Context Budget](context-budget.md) (1 rule)
 - [Copilot / VS Code](copilot.md) (1 rule)
-- [Cursor](cursor.md) (2 rules)
+- [Cursor](cursor.md) (4 rules)
 - [Devin](devin.md) (2 rules)
 - [Google Antigravity](antigravity.md) (4 rules)
 - [Grok Build](grok.md) (8 rules)
@@ -22,12 +22,12 @@ skillsaw includes **101** built-in rules organized into the following categories
 - [MCP (Model Context Protocol)](mcp.md) (5 rules)
 - [Muse Code](muse.md) (1 rule)
 - [OpenAI Codex](codex.md) (6 rules)
-- [OpenClaw](openclaw.md) (1 rule)
+- [OpenClaw](openclaw.md) (4 rules)
 - [OpenCode](opencode.md) (1 rule)
+- [Pi](pi.md) (3 rules)
 - [Promptfoo Evals](promptfoo.md) (3 rules)
 - [Security](security.md) (4 rules)
 - [Vercel](vercel.md) (1 rule)
-- [Deprecated](deprecated.md) (3 rules)
 
 ## All Rules
 
@@ -88,7 +88,9 @@ skillsaw includes **101** built-in rules organized into the following categories
 | [`context-budget`](context-budget.md) | Warn when instruction or config files exceed recommended token limits | warning (auto) | - | Context Budget |
 | [`copilot-agent-valid`](copilot-agent-valid.md) | Copilot and VS Code custom agents must use target-compatible frontmatter | error (auto) | - | Copilot / VS Code |
 | [`cursor-rules-valid`](cursor-rules-valid.md) | Cursor .mdc rules must have frontmatter that lets the rule activate | error (auto) | auto | Cursor |
-| [`cursor-hooks-valid`](cursor-hooks-valid.md) | .cursor/hooks.json must declare version 1 and known hook events with commands | error (auto) | - | Cursor |
+| [`cursor-hooks-valid`](cursor-hooks-valid.md) | Cursor hooks must use known events and valid commands; project hooks require version 1 | error (auto) | - | Cursor |
+| [`cursor-plugin-json-valid`](cursor-plugin-json-valid.md) | Cursor plugin manifests must declare valid metadata and contained components | error (auto) | - | Cursor |
+| [`cursor-marketplace-json-valid`](cursor-marketplace-json-valid.md) | Cursor marketplaces must contain valid entries with unique names and resolvable local sources | error (auto) | - | Cursor |
 | [`devin-rules-valid`](devin-rules-valid.md) | Devin workspace rules must have valid activation frontmatter and fit its size limit | error (auto) | - | Devin |
 | [`devin-skill-valid`](devin-skill-valid.md) | Devin-native SKILL.md frontmatter must use Devin's documented field shapes | error (auto) | - | Devin |
 | [`antigravity-config-json-valid`](antigravity-config-json-valid.md) | Antigravity registry files must decode their paths and filters correctly | error (disabled) | - | Google Antigravity |
@@ -117,12 +119,18 @@ skillsaw includes **101** built-in rules organized into the following categories
 | [`muse-hooks-valid`](muse-hooks-valid.md) | .muse/hooks.json must use Muse's events, matcher groups and handler fields | error (disabled) | - | Muse Code |
 | [`codex-hooks-valid`](codex-hooks-valid.md) | Codex hooks files must use Codex's hook events, handler types, and fields | error (auto) | - | OpenAI Codex |
 | [`codex-openai-metadata`](codex-openai-metadata.md) | Validate skill openai.yaml and catalog-compatible plugin metadata | error (auto) | - | OpenAI Codex |
-| [`codex-plugin-json-valid`](codex-plugin-json-valid.md) | .codex-plugin/plugin.json must be valid JSON with required fields | error (auto) | - | OpenAI Codex |
+| [`codex-plugin-json-valid`](codex-plugin-json-valid.md) | The selected Codex manifest or portable OpenAI overlay must be valid | error (auto) | - | OpenAI Codex |
 | [`codex-plugin-structure`](codex-plugin-structure.md) | Only plugin.json belongs in .codex-plugin/ | warning (auto) | - | OpenAI Codex |
 | [`codex-marketplace-json-valid`](codex-marketplace-json-valid.md) | .agents/plugins/marketplace.json must be valid JSON with required fields | error (auto) | - | OpenAI Codex |
 | [`codex-marketplace-registration`](codex-marketplace-registration.md) | Codex plugins must be registered in .agents/plugins/marketplace.json | error (auto) | auto | OpenAI Codex |
 | [`openclaw-metadata`](openclaw-metadata.md) | Validate metadata.openclaw fields against the OpenClaw spec | warning (auto) | - | OpenClaw |
+| [`openclaw-manifest-valid`](openclaw-manifest-valid.md) | Native OpenClaw manifests must declare an id and object configSchema | error (disabled) | - | OpenClaw |
+| [`openclaw-package-valid`](openclaw-package-valid.md) | OpenClaw package metadata must declare valid extension entries | error (disabled) | - | OpenClaw |
+| [`openclaw-resources`](openclaw-resources.md) | OpenClaw resources should resolve inside their package and exist when loaded | warning (disabled) | - | OpenClaw |
 | [`opencode-config-valid`](opencode-config-valid.md) | opencode.json and opencode.jsonc must parse and use keys and MCP server shapes OpenCode reads | error (auto) | - | OpenCode |
+| [`pi-config-valid`](pi-config-valid.md) | Pi package and project resource declarations must have valid types | warning (auto) | - | Pi |
+| [`pi-skill-valid`](pi-skill-valid.md) | Pi skills need parseable frontmatter and a nonempty description | warning (auto) | - | Pi |
+| [`pi-resource-paths`](pi-resource-paths.md) | Literal Pi resource paths should exist in the assembled checkout | warning (disabled) | - | Pi |
 | [`promptfoo-valid`](promptfoo-valid.md) | Validate promptfoo eval YAML config structure and file references | error (auto) | - | Promptfoo Evals |
 | [`promptfoo-assertions`](promptfoo-assertions.md) | Require specific assertion types in all promptfoo eval tests | warning (disabled) | - | Promptfoo Evals |
 | [`promptfoo-metadata`](promptfoo-metadata.md) | Require specific metadata keys on all promptfoo eval tests | warning (disabled) | - | Promptfoo Evals |
@@ -131,6 +139,3 @@ skillsaw includes **101** built-in rules organized into the following categories
 | [`security-encoded-payload`](security-encoded-payload.md) | Detect long high-entropy base64/hex blobs that can smuggle encoded payloads | warning (auto) | - | Security |
 | [`security-dynamic-context`](security-dynamic-context.md) | Require an allowlist for dynamic context commands that execute shell code while loading agent context | warning (auto) | - | Security |
 | [`skills-lock-valid`](skills-lock-valid.md) | skills-lock.json files must be valid and portable project lockfiles | error (auto) | - | Vercel |
-| [`content-critical-position`](content-critical-position.md) | Detect critical instructions in the middle of files where LLM attention is lowest | info (deprecated) | - | Deprecated |
-| [`content-actionability-score`](content-actionability-score.md) | Score instruction files on actionability (verb density, commands, file references) | info (deprecated) | - | Deprecated |
-| [`skill-frontmatter`](skill-frontmatter.md) | SKILL.md files should have frontmatter with name and description | warning (deprecated) | auto | Deprecated |

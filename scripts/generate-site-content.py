@@ -186,16 +186,19 @@ RULE_GROUPS = [
     (
         "Cursor",
         "cursor",
-        ["cursor-rules-valid", "cursor-hooks-valid"],
-        "Validates Cursor's repository-shipped configuration under every `.cursor/` "
+        ["cursor-rules-valid", "cursor-hooks-valid", "cursor-plugin-json-valid", "cursor-marketplace-json-valid"],
+        "Validates native `.cursor-plugin` manifests, marketplaces and component "
+        "paths. It also validates Cursor configuration under every `.cursor/` "
         "directory in the repository, the root one and any in a monorepo "
         "subpackage: `rules/**/*.mdc` "
         "frontmatter (the fields that decide whether a rule ever activates) and "
         "`.cursor/hooks.json` structure. Cursor reads AGENTS.md for portable "
         "instructions, so no Cursor-specific instruction format is validated. "
-        "Enabled automatically wherever a `.cursorrules` file exists, or a "
+        "Packaging rules activate on `.cursor-plugin/plugin.json` or "
+        "`.cursor-plugin/marketplace.json`. Project rules activate wherever a "
+        "`.cursorrules` file exists, or a "
         "`.cursor/` directory holds Cursor content — `rules/`, `commands/`, "
-        "`skills/`, `mcp.json` or `hooks.json`. A `.cursor/` holding only "
+        "`agents/`, `skills/`, `mcp.json` or `hooks.json`. A `.cursor/` holding only "
         "unrelated files does not activate them.",
     ),
     (
@@ -346,10 +349,9 @@ RULE_GROUPS = [
     (
         "OpenClaw",
         "openclaw",
-        ["openclaw-metadata"],
-        "Validates `metadata.openclaw` in SKILL.md frontmatter against the "
-        "[OpenClaw spec](https://docs.openclaw.ai/tools/skills). Only fires "
-        "when `metadata.openclaw` is present.",
+        ["openclaw-metadata", "openclaw-manifest-valid", "openclaw-package-valid", "openclaw-resources"],
+        "Native plugin manifests, package entrypoints, resource paths, and skill metadata. "
+        "The metadata rule applies only when `metadata.openclaw` is present in SKILL.md.",
     ),
     (
         "OpenCode",
@@ -371,6 +373,15 @@ RULE_GROUPS = [
         "`opencode.json` or `opencode.jsonc` exists, or a `.opencode/` "
         "directory holds OpenCode "
         "content.",
+    ),
+    (
+        "Pi",
+        "pi",
+        ["pi-config-valid", "pi-skill-valid", "pi-resource-paths"],
+        "Discovers Pi packages and `.pi/` project resources, validates resource "
+        "arrays and native skill metadata, and exposes prompts and flat skills "
+        "to content checks. Literal resource-path checks are opt-in. "
+        "Extensions are never executed and remote packages are not installed.",
     ),
     (
         "Promptfoo Evals",
@@ -409,21 +420,7 @@ RULE_GROUPS = [
         "and paths that remain portable across machines. Lockfiles are discovered "
         "recursively for monorepos and the rule auto-enables when one is present.",
     ),
-    (
-        "Deprecated",
-        "deprecated",
-        [
-            "content-critical-position",
-            "content-actionability-score",
-            "skill-frontmatter",
-        ],
-        "These rules are deprecated and will be removed in a future release. "
-        "They no longer run under `enabled: auto`; set `enabled: true` in "
-        "`.skillsaw.yaml` to keep running one during the transition. The "
-        "content rules encoded attention-era heuristics that newer models no "
-        "longer need; `skill-frontmatter` is replaced by "
-        "[`agentskill-valid`](agentskill-valid.md).",
-    ),
+
 ]
 
 CONTENT_RULE_IDS = [

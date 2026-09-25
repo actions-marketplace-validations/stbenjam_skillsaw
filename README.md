@@ -26,8 +26,8 @@ and context rules backed by research and frontier lab guidance.
 It understands Agent Skills,
 [Agent Plugins v1](https://agent-plugins.org/specification), Claude Code
 plugins, OpenAI Codex plugins and marketplaces, CLAUDE.md, AGENTS.md,
-GEMINI.md, QWEN.md, Cursor, Copilot, Cline, Devin, Kiro, OpenCode, Muse Code,
-Grok Build, Google Antigravity, hooks, agent configuration, MCP Registry
+GEMINI.md, QWEN.md, Cursor plugins and marketplaces, Copilot, Cline, Devin, Kiro, OpenCode, Muse Code, Pi,
+Grok Build, Google Antigravity, native OpenClaw plugins, hooks, agent configuration, MCP Registry
 `server.json` publisher metadata,
 Vercel skills CLI lockfiles, and eval formats. Safe structural fixes can be applied
 automatically; everything else comes with precise, agent-friendly guidance.
@@ -53,6 +53,17 @@ https://raw.githubusercontent.com/stbenjam/skillsaw/refs/heads/main/skills/skill
 to onboard this repo to skillsaw.
 ```
 
+Or install the onboarding skill for regular use (recommended). Run this from
+the repository you want to lint:
+
+```bash
+npx skills add stbenjam/skillsaw
+```
+
+Select **`skillsaw-onboard`** and your coding agent, then ask the agent to use
+that skill to onboard the repo. See [Onboard with AI](https://skillsaw.org/getting-started/#onboard-with-ai)
+for plugin installation alternatives.
+
 Or run it yourself. No installation is required with
 [`uvx`](https://docs.astral.sh/uv/guides/tools/):
 
@@ -68,7 +79,7 @@ INFO findings too. A configured `fail-on: info` includes them automatically.
 
 ## What it catches
 
-- **Multi-ecosystem structure & compatibility:** schema, frontmatter, and manifest validation for Agent Skills (`SKILL.md`), Claude Code, OpenAI Codex (project config, plugins & marketplaces), Grok Build (project config, plugins & marketplaces), Google Antigravity (configuration in any customization root — `.agents/`, `.agent/`, `_agents/`, `_agent/` — its `rules/` and `agents/` prose, plugins, hooks, MCP servers and registries), Agent Plugins v1 (`plugin.json`, `mcp.json`), GitHub Copilot & VS Code custom agents (`.github/agents/`), OpenCode configuration, APM packages, MCP server maps, and MCP Registry metadata.
+- **Multi-ecosystem structure & compatibility:** schema, frontmatter, and manifest validation for Agent Skills (`SKILL.md`), Claude Code, OpenAI Codex (project config, plugins & marketplaces), Grok Build (project config, plugins & marketplaces), Google Antigravity (configuration in any customization root — `.agents/`, `.agent/`, `_agents/`, `_agent/` — its `rules/` and `agents/` prose, plugins, hooks, MCP servers and registries), Agent Plugins v1 (`plugin.json`, `mcp.json`), GitHub Copilot & VS Code custom agents (`.github/agents/`), OpenCode configuration, Pi packages and project resources, APM packages, MCP server maps, and MCP Registry metadata.
 - **Content quality & token economy:** research-backed rules detecting instruction drift across duplicate files, lost-in-the-middle attention dead zones, cognitive overload, section length violations, weak language, contradictions, and repetitive inline tool-call examples.
 - **Discovery & repository integrity:** unreferenced bundled files, broken internal file references, inconsistent terminology, missing stop conditions, and stale baselines.
 - **Security & supply chain:**
@@ -80,6 +91,9 @@ INFO findings too. A configured `fail-on: info` includes them automatically.
 skillsaw detects repository types automatically and lints multiple formats in the same project. See [supported repository types](https://skillsaw.org/repo-types/) and the [complete rule reference](https://skillsaw.org/rules/) for details.
 
 
+Pi packages and `.pi/` project resources are supported, including native skills,
+prompt templates, manifest globs and local package references. See
+[Pi configuration checks](https://skillsaw.org/rules/pi-config-valid/).
 
 ## Built for real workflows
 
@@ -107,6 +121,10 @@ being silently ignored.
 | Look up commands and flags | [CLI Reference](https://skillsaw.org/cli/) |
 | Feed the docs to an AI agent | [llms.txt](https://skillsaw.org/llms.txt) index, [llms-full.txt](https://skillsaw.org/llms-full.txt) full docs |
 
+Codex portable plugins can place OpenAI metadata and hooks in
+`plugin.json` under `extensions.com.openai`. Skillsaw follows that overlay's
+precedence over `.codex-plugin/plugin.json`, validates its declared resources,
+and checks portable `skills/` and `mcp.json` through the Agent Plugins rules.
 
 ## Measure the result
 

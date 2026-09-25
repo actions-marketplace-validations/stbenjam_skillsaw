@@ -41,6 +41,7 @@ to check, the rules that map, and sync notes (hand-copied values that can drift)
 | Model Context Protocol and MCP Registry | [references/mcp.md](references/mcp.md) | `mcp/`, `mcp_registry/` |
 | CodeRabbit (`.coderabbit.yaml`) | [references/coderabbit.md](references/coderabbit.md) | `coderabbit/` |
 | APM (`.apm/`) | [references/apm.md](references/apm.md) | `apm/` |
+| Pi (packages and project resources) | [references/pi.md](references/pi.md) | `pi/`, `formats/pi.py` |
 | Muse Code (hooks) | [references/muse.md](references/muse.md) | `muse/`, `formats/muse.py` |
 | Grok Build (`.grok/` project layer) | [references/grok.md](references/grok.md) | `grok/`, `formats/grok.py` |
 | Google Antigravity (`.agents/` customization roots, plugins) | [references/antigravity.md](references/antigravity.md) | `antigravity/`, `formats/antigravity.py` |
@@ -55,6 +56,21 @@ the `plugin-creator` skill is stricter — so the two can drift apart from each 
 Where a reference marks a check as deliberately omitted, that omission is binding. A
 "missing" check listed there was left out on purpose; add it only when the upstream
 spec changes.
+
+### Resolve conflicting evidence
+
+Explicit requirements in the applicable upstream spec take precedence over catalog
+examples and permissive runtime behavior. A package loading successfully does not
+make its layout conformant. Treat reference repositories as regression inputs:
+classify findings against the spec instead of assuming every finding is a false
+positive or weakening a rule to obtain a clean corpus run.
+
+Before relaxing an existing check, cite the upstream requirement that changed and
+verify its version and scope. Use release-tagged specs and implementations together
+when assessing a released host; distinguish unreleased changes on `main`. If sources
+conflict without a clear resolution, preserve the check and report the discrepancy.
+Honor recorded maintainer rejections; do not resubmit a rejected exception based on
+the same catalog examples or runtime tolerance.
 
 ## Step 2: Identify gaps
 

